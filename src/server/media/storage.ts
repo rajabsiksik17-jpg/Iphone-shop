@@ -63,7 +63,10 @@ class SupabaseDriver implements StorageDriver {
     const e = env();
     this.base = `${e.SUPABASE_URL!.replace(/\/$/, "")}/storage/v1`;
     this.bucket = e.SUPABASE_STORAGE_BUCKET;
-    this.headers = { Authorization: `Bearer ${e.SUPABASE_SERVICE_ROLE_KEY}`, apikey: e.SUPABASE_SERVICE_ROLE_KEY! };
+    const key = e.SUPABASE_SERVICE_ROLE_KEY!;
+    // New-style secret keys (sb_secret_…) aren't JWTs: send them only as `apikey`
+    // and the gateway authorises the request. Legacy service_role JWTs also go as Bearer.
+    this.headers = key.startsWith("sb_secret_") ? { apikey: key } : { Authorization: `Bearer ${key}`, apikey: key };
   }
 
   private url(key: string) {

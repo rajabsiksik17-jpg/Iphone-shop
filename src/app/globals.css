@@ -400,3 +400,89 @@ body[data-listing-loading] [data-listing-grid] {
   opacity: 0.45;
   pointer-events: none;
 }
+
+/* ── react-phone-number-input ────────────────────────────────────────────────
+   The library's style.css, inlined (RTL-aware) so the build never processes a
+   third-party CSS file — that extra PostCSS pass crashed builds on hosts with
+   tight process/memory limits. */
+@layer components {
+  :root {
+    --PhoneInputCountryFlag-aspectRatio: 1.5;
+    --PhoneInputCountryFlag-height: 1em;
+    --PhoneInputCountryFlag-borderWidth: 1px;
+    --PhoneInputCountryFlag-borderColor: rgb(0 0 0 / 0.5);
+    --PhoneInputCountryFlag-backgroundColor--loading: rgb(0 0 0 / 0.1);
+    --PhoneInputCountrySelectArrow-width: 0.3em;
+  }
+  .PhoneInput {
+    display: flex;
+    align-items: center;
+  }
+  .PhoneInputInput {
+    flex: 1;
+    min-width: 0;
+  }
+  .PhoneInputCountryIcon {
+    width: calc(var(--PhoneInputCountryFlag-height) * var(--PhoneInputCountryFlag-aspectRatio));
+    height: var(--PhoneInputCountryFlag-height);
+  }
+  .PhoneInputCountryIcon--square {
+    width: var(--PhoneInputCountryFlag-height);
+  }
+  .PhoneInputCountryIcon--border {
+    background-color: var(--PhoneInputCountryFlag-backgroundColor--loading);
+    box-shadow:
+      0 0 0 var(--PhoneInputCountryFlag-borderWidth) var(--PhoneInputCountryFlag-borderColor),
+      inset 0 0 0 var(--PhoneInputCountryFlag-borderWidth) var(--PhoneInputCountryFlag-borderColor);
+  }
+  .PhoneInputCountryIconImg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .PhoneInputInternationalIconPhone {
+    opacity: 0.8;
+  }
+  .PhoneInputInternationalIconGlobe {
+    opacity: 0.65;
+  }
+  .PhoneInputCountry {
+    position: relative;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    margin-inline-end: 0.35em;
+  }
+  .PhoneInputCountrySelect {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .PhoneInputCountrySelect[disabled],
+  .PhoneInputCountrySelect[readonly] {
+    cursor: default;
+  }
+  .PhoneInputCountrySelectArrow {
+    display: block;
+    width: var(--PhoneInputCountrySelectArrow-width);
+    height: var(--PhoneInputCountrySelectArrow-width);
+    margin-inline-start: 0.35em;
+    border-style: solid;
+    border-color: currentColor;
+    border-width: 0 1px 1px 0;
+    transform: rotate(45deg);
+    opacity: 0.45;
+  }
+  .PhoneInputCountrySelect:focus + .PhoneInputCountryIcon + .PhoneInputCountrySelectArrow {
+    opacity: 1;
+    color: var(--color-accent);
+  }
+  .PhoneInputCountrySelect:focus + .PhoneInputCountryIcon--border {
+    box-shadow:
+      0 0 0 var(--PhoneInputCountryFlag-borderWidth) var(--color-accent),
+      inset 0 0 0 var(--PhoneInputCountryFlag-borderWidth) var(--color-accent);
+  }
+}

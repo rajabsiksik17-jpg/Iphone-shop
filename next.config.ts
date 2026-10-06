@@ -35,6 +35,10 @@ const config: NextConfig = {
   serverExternalPackages: ["@node-rs/argon2", "sharp", "imapflow", "nodemailer", "pg"],
   experimental: {
     serverActions: { bodySizeLimit: "12mb" },
+    // Keeps production builds within the memory/process limits of shared
+    // Node hosting (e.g. Hostinger): webpack with fewer parallel workers.
+    webpackMemoryOptimizations: true,
+    cpus: Number(process.env.BUILD_CPUS) || 2,
   },
   images: {
     // Media renditions are generated at upload time (see server/media), so the

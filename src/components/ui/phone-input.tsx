@@ -4,7 +4,6 @@ import PhoneInputBase, { type Country } from "react-phone-number-input";
 import flags from "react-phone-number-input/flags";
 import arLabels from "react-phone-number-input/locale/ar.json";
 import enLabels from "react-phone-number-input/locale/en.json";
-import "react-phone-number-input/style.css";
 import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useOptionalStore } from "@/components/providers/store-context";
