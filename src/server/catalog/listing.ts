@@ -1,4 +1,5 @@
 import "server-only";
+import { normalizeText, phoneticKey, romanizeArabic, stemText } from "@/lib/search-text";
 import { db, Prisma } from "../db";
 import { getSettings } from "../settings/service";
 import { t } from "@/lib/i18n-text";
@@ -16,26 +17,85 @@ export function visibleWhere(now = new Date(), context: "browse" | "search" = "b
   };
 }
 
+/** Query normalization shared with the index builder (see lib/search-text). */
 export function normalizeQuery(q: string) {
-  return q.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 100);
+  return normalizeText(q).slice(0, 100);
 }
 
+const escapeLike = (s: string) => s.replace(/[%_\\]/g, "\\$&");
+
 /**
- * Fuzzy search over the denormalised search document using pg_trgm.
- * Matches substrings and typos (word similarity) and returns ranked ids.
+ * Ranked product search.
+ *
+ * One query scores every candidate on: exact name, exact brand, name/word
+ * prefix, fuzzy name, SKU, phonetic match (Arabic ↔ English transliteration
+ * and typos), the full document (categories, specs, tags) and popularity.
+ * Candidates come from GIN trigram indexes (LIKE / <% operators), so the
+ * whole catalogue is never scanned in application code.
  */
 export async function searchProductIds(q: string, limit = 400): Promise<{ id: string; score: number }[]> {
   const term = normalizeQuery(q);
   if (!term) return [];
-  const like = `%${term.replace(/[%_\\]/g, "\\$&")}%`;
+  const phon = phoneticKey(term);
+  const usePhon = phon.replace(/\s/g, "").length >= 2;
+  const stem = stemText(term) || term;
+  // Romanized Arabic query (matches the romanized copy in the index); falls
+  // back to the plain term for Latin-only queries.
+  const roman = romanizeArabic(`${term} ${stemText(term)}`) || term;
+  const like = `%${escapeLike(term)}%`;
+  const prefix = `${escapeLike(term)}%`;
+  const wordPrefix = `% ${escapeLike(term)}%`;
+  // SKUs compared without punctuation ("APL-IP17" ≡ "apl ip17").
+  const skuTerm = term.replace(/[^a-z0-9]+/g, "");
   // Parameterised — never string-concatenate user input into SQL.
-  return db.$queryRaw<{ id: string; score: number }[]>`
-    SELECT id, GREATEST(word_similarity(${term}, "searchText"), CASE WHEN "searchText" ILIKE ${like} THEN 1 ELSE 0 END)::float AS score
-    FROM "Product"
-    WHERE "status" = 'ACTIVE'
-      AND ("searchText" ILIKE ${like} OR ${term} <% "searchText")
-    ORDER BY score DESC, "salesCount" DESC
-    LIMIT ${limit}`;
+  const rows = await db.$transaction(async (tx) => {
+    // Lower than the 0.6 default so 1–2 typos in a short word still match.
+    await tx.$executeRawUnsafe(`SET LOCAL pg_trgm.word_similarity_threshold = 0.45`);
+    return tx.$queryRaw<{ id: string; score: number; textSim: number; phonSim: number; literal: boolean; sku: boolean }[]>`
+      WITH c AS (
+        SELECT id, "searchTitle", "searchBrand", "searchText", "salesCount", "ratingAvg", "isFeatured",
+          regexp_replace(lower(coalesce("sku", '')), '[^a-z0-9]+', '', 'g') AS skuN,
+          GREATEST(word_similarity(${term}, "searchText"), word_similarity(${stem}, "searchText"), word_similarity(${roman}, "searchText")) AS "textSim",
+          CASE WHEN ${usePhon} THEN word_similarity(${phon}, "searchPhonetic") ELSE 0 END AS "phonSim",
+          ("searchText" LIKE ${like}) AS literal
+        FROM "Product"
+        WHERE "status" = 'ACTIVE'
+          AND (
+            "searchText" LIKE ${like}
+            OR ${term} <% "searchText"
+            OR ${stem} <% "searchText"
+            OR ${roman} <% "searchText"
+            OR (${usePhon} AND ${phon} <% "searchPhonetic")
+            OR (${skuTerm} <> '' AND regexp_replace(lower(coalesce("sku", '')), '[^a-z0-9]+', '', 'g') LIKE ${skuTerm + "%"})
+          )
+      )
+      SELECT id, "textSim"::float, "phonSim"::float, literal,
+        (${skuTerm} <> '' AND skuN LIKE ${skuTerm + "%"}) AS sku,
+        (
+            CASE WHEN "searchTitle" = ${term} THEN 100 ELSE 0 END
+          + CASE WHEN "searchBrand" <> '' AND "searchBrand" = ${term} THEN 60 ELSE 0 END
+          + CASE WHEN "searchTitle" LIKE ${prefix} THEN 45 WHEN "searchTitle" LIKE ${wordPrefix} THEN 35 ELSE 0 END
+          + 35 * word_similarity(${term}, "searchTitle")
+          + 12 * similarity(${term}, "searchTitle")
+          + 20 * word_similarity(${term}, "searchBrand")
+          + CASE WHEN ${skuTerm} <> '' AND skuN = ${skuTerm} THEN 90 WHEN ${skuTerm} <> '' AND skuN LIKE ${skuTerm + "%"} THEN 30 ELSE 0 END
+          + 30 * "phonSim"
+          + 22 * "textSim"
+          + CASE WHEN literal THEN 10 ELSE 0 END
+          + LEAST(6, ln(1 + "salesCount")) + "ratingAvg" * 0.4 + CASE WHEN "isFeatured" THEN 1 ELSE 0 END
+        )::float AS score
+      FROM c
+      ORDER BY score DESC, "salesCount" DESC
+      LIMIT ${limit}`;
+  });
+  // A product must match on something substantial — a literal substring, a
+  // close fuzzy match, a near-exact phonetic match or an SKU prefix — so short
+  // or random queries don't return noise.
+  const strong = rows.filter((r) => r.literal || r.sku || r.textSim >= 0.5 || r.phonSim >= 0.75);
+  if (!strong.length) return [];
+  // Drop the long tail of weak matches once there are strong ones.
+  const cutoff = Math.max(14, strong[0].score * 0.18);
+  return strong.filter((r) => r.score >= cutoff).map((r) => ({ id: r.id, score: r.score }));
 }
 
 function baseWhere(query: ListingQuery, searchIds: string[] | null): Prisma.ProductWhereInput {

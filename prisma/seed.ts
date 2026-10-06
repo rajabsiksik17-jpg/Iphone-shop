@@ -22,10 +22,20 @@ import { initialSectionData } from "../src/cms/sections";
 import { buildFullSlug, buildPath, depthOf } from "../src/lib/category-tree";
 import { ATTRIBUTES, ATTRIBUTE_GROUPS, BRANDS, CATEGORIES, COLORS, PRODUCTS, type CategoryDef } from "./seed/catalog-data";
 import { ABOUT, ANNOUNCEMENTS, FAQS, FAQ_CATEGORIES, LEGAL_PAGES, SOCIAL_PLATFORMS } from "./seed/content-data";
+import { CURRENCY_CATALOG } from "../src/config/currencies";
+import { buildDefaultNavigation } from "../src/server/setup/navigation";
 import { brandLogo, categoryArt, productArt, slideArt, bannerArt, type DeviceKind } from "./seed/art";
 
 const L = (en: string, ar: string) => ({ en, ar });
-const JOD = (major: number) => Math.round(major * 1000);
+const SAR = (major: number) => Math.round(major * 100);
+// Catalogue prices in the data files are authored in JOD; both JOD and SAR are
+// pegged to the US dollar, so the conversion is stable. Retail-style rounding:
+// whole riyals, ending in 9 above 100 SAR (799 JOD → 4,229 SAR).
+const JOD_TO_SAR = 5.29;
+const retail = (jod: number) => {
+  const sar = jod * JOD_TO_SAR;
+  return SAR(sar >= 100 ? Math.round(sar / 10) * 10 - 1 : Math.round(sar));
+};
 const log = (...a: unknown[]) => console.log("  ·", ...a);
 
 async function svgMedia(svg: string, folder: string, alt?: { en: string; ar: string }, width?: number) {
@@ -43,12 +53,13 @@ async function essentials() {
     await db.role.upsert({ where: { key: r.key }, create: { key: r.key, name: r.name, permissions: r.permissions, isSystem: true }, update: {} });
   }
 
-  const currencies = [
-    { code: "JOD", name: L("Jordanian Dinar", "دينار أردني"), symbol: L("JOD", "د.أ"), decimals: 3, symbolPosition: "AFTER" as const, rate: 1, isBase: true, position: 0 },
-    { code: "USD", name: L("US Dollar", "دولار أمريكي"), symbol: L("$", "$"), decimals: 2, symbolPosition: "BEFORE" as const, rate: 1.41, isBase: false, position: 1 },
-    { code: "EUR", name: L("Euro", "يورو"), symbol: L("€", "€"), decimals: 2, symbolPosition: "BEFORE" as const, rate: 1.21, isBase: false, position: 2 },
-  ];
-  for (const c of currencies) await db.currency.upsert({ where: { code: c.code }, create: c, update: {} });
+  // SAR is the base currency; the others are display currencies whose rates
+  // are refreshed from the rates provider (see server/commerce/fx.ts).
+  const approxRates: Record<string, number> = { SAR: 1, AED: 0.98, QAR: 0.97, KWD: 0.082, BHD: 0.1, OMR: 0.103, JOD: 0.189, EGP: 13, IQD: 349, MAD: 2.5, TND: 0.82, DZD: 35.8, TRY: 10.9, USD: 0.2667, EUR: 0.23, GBP: 0.2 };
+  for (const [position, c] of CURRENCY_CATALOG.entries()) {
+    const data = { code: c.code, name: c.name, symbol: c.symbol, decimals: c.decimals, flag: c.flag, symbolPosition: ["USD", "EUR", "GBP", "TRY"].includes(c.code) ? ("BEFORE" as const) : ("AFTER" as const), rate: approxRates[c.code] ?? 1, isBase: c.code === "SAR", autoRate: c.code !== "SAR", position };
+    await db.currency.upsert({ where: { code: c.code }, create: data, update: {} });
+  }
 
   const statuses = [
     { key: "pending", label: L("Pending", "قيد الانتظار"), color: "#d97706", position: 0, countsAsSale: true },
@@ -202,10 +213,10 @@ async function catalogue() {
         publishedAt: new Date(now - (PRODUCTS.length - index) * 86_400_000 * 1.5),
         createdAt: new Date(now - (PRODUCTS.length - index) * 86_400_000 * 1.5),
         brandId: brandIds.get(p.brand),
-        price: JOD(p.price),
-        salePrice: p.sale ? JOD(p.sale) : null,
+        price: retail(p.price),
+        salePrice: p.sale ? retail(p.sale) : null,
         saleEndsAt: p.sale && p.saleDays ? new Date(now + p.saleDays * 86_400_000) : null,
-        costPrice: JOD(Math.round(p.price * 0.78)),
+        costPrice: Math.round(retail(p.price) * 0.78),
         stock: variable ? 0 : (p.stock ?? 25),
         weightGrams: p.weight,
         warranty: p.warranty ?? {},
@@ -268,8 +279,8 @@ async function catalogue() {
           data: {
             productId: created.id,
             sku: `${p.sku}-${Object.values(combo).map((v) => v.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 14)).join("-")}`,
-            price: delta ? JOD(p.price + delta) : null,
-            salePrice: p.sale && delta ? JOD(p.sale + delta) : null,
+            price: delta ? retail(p.price + delta) : null,
+            salePrice: p.sale && delta ? retail(p.sale + delta) : null,
             saleEndsAt: p.sale && delta && p.saleDays ? new Date(now + p.saleDays * 86_400_000) : null,
             stock,
             imageId: img?.mediaId,
@@ -303,8 +314,8 @@ async function catalogue() {
 async function content(catIds: Map<string, { id: string; path: string }>, brandIds: Map<string, string>) {
   console.log("Seeding content…");
   const slides = [
-    { kind: "phone-pro" as const, color: "#e46a2e", from: "#120a05", to: "#3b1a0c", accent: "#e46a2e", eyebrow: L("New", "جديد"), heading: L("iPhone 17 Pro.\nAll out Pro.", "آيفون 17 برو.\nاحترافي بالكامل."), body: L("Aluminium unibody. A19 Pro. Three 48MP cameras. Order now with next-day delivery in Amman.", "هيكل ألمنيوم موحّد. معالج A19 Pro. ثلاث كاميرات 48 ميجابكسل. اطلبه الآن مع التوصيل في اليوم التالي داخل عمّان."), primary: { label: L("Buy now", "اشترِ الآن"), href: "/product/iphone-17-pro" }, secondary: { label: L("Compare iPhones", "قارن أجهزة آيفون"), href: "/category/smartphones/iphones" } },
-    { kind: "phone-pro" as const, color: "#7d7f82", from: "#05070d", to: "#1b2338", accent: "#6d8bd6", eyebrow: L("Limited-time offer", "عرض لفترة محدودة"), heading: L("Galaxy S25 Ultra\nnow 90 JOD off", "جالكسي S25 ألترا\nبخصم 90 ديناراً"), body: L("Titanium, S Pen and a 200MP camera — at its best price yet.", "التيتانيوم وقلم S Pen وكاميرا 200 ميجابكسل — بأفضل سعر حتى الآن."), primary: { label: L("Shop the deal", "تسوّق العرض"), href: "/product/galaxy-s25-ultra" }, secondary: { label: L("All Galaxy", "كل أجهزة جالكسي"), href: "/category/smartphones/android/samsung-galaxy" } },
+    { kind: "phone-pro" as const, color: "#e46a2e", from: "#120a05", to: "#3b1a0c", accent: "#e46a2e", eyebrow: L("New", "جديد"), heading: L("iPhone 17 Pro.\nAll out Pro.", "آيفون 17 برو.\nاحترافي بالكامل."), body: L("Aluminium unibody. A19 Pro. Three 48MP cameras. Order now with next-day delivery in Riyadh, Jeddah and Dammam.", "هيكل ألمنيوم موحّد. معالج A19 Pro. ثلاث كاميرات 48 ميجابكسل. اطلبه الآن مع التوصيل في اليوم التالي داخل الرياض وجدة والدمام."), primary: { label: L("Buy now", "اشترِ الآن"), href: "/product/iphone-17-pro" }, secondary: { label: L("Compare iPhones", "قارن أجهزة آيفون"), href: "/category/smartphones/iphones" } },
+    { kind: "phone-pro" as const, color: "#7d7f82", from: "#05070d", to: "#1b2338", accent: "#6d8bd6", eyebrow: L("Limited-time offer", "عرض لفترة محدودة"), heading: L("Galaxy S25 Ultra\nat its best price", "جالكسي S25 ألترا\nبأفضل سعر"), body: L("Titanium, S Pen and a 200MP camera — at its best price yet.", "التيتانيوم وقلم S Pen وكاميرا 200 ميجابكسل — بأفضل سعر حتى الآن."), primary: { label: L("Shop the deal", "تسوّق العرض"), href: "/product/galaxy-s25-ultra" }, secondary: { label: L("All Galaxy", "كل أجهزة جالكسي"), href: "/category/smartphones/android/samsung-galaxy" } },
     { kind: "earbuds" as const, color: "#f2f2f4", from: "#0b1220", to: "#1e1b4b", accent: "#8b5cf6", eyebrow: L("Audio week", "أسبوع الصوتيات"), heading: L("Hear more.\nPay less.", "اسمع أكثر.\nوادفع أقل."), body: L("Up to 18% off AirPods, Galaxy Buds and Sony noise-cancelling headphones.", "خصومات حتى 18% على إيربودز وجالكسي بادز وسماعات سوني."), primary: { label: L("Shop audio", "تسوّق الصوتيات"), href: "/category/audio" }, secondary: null },
   ];
   const slider = await db.slider.create({ data: { key: "home", name: "Homepage hero", settings: { autoplay: true, interval: 6500, transition: "fade", loop: true, showArrows: true, showDots: true } } });
@@ -352,7 +363,7 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
         section("product_carousel", { title: L("New arrivals", "وصل حديثاً"), subtitle: L("The latest launches, in stock now.", "أحدث الإصدارات، متوفرة الآن."), source: "new", limit: 10, layout: "carousel", viewAll: "/shop?sort=newest" }),
         section("promo_banners", {
           items: [
-            { image: { id: banner1.id, url: banner1.url }, eyebrow: L("Back to uni", "العودة للجامعة"), title: L("MacBook Air M4", "ماك بوك إير M4"), text: L("All-day battery, 16GB memory. From 799 JOD.", "بطارية تدوم طوال اليوم وذاكرة 16 جيجابايت. ابتداءً من 799 ديناراً."), cta: L("Shop laptops", "تسوّق اللابتوبات"), href: "/category/laptops", theme: "light" },
+            { image: { id: banner1.id, url: banner1.url }, eyebrow: L("Back to uni", "العودة للجامعة"), title: L("MacBook Air M4", "ماك بوك إير M4"), text: L("All-day battery, 16GB memory. From 4,229 SAR.", "بطارية تدوم طوال اليوم وذاكرة 16 جيجابايت. ابتداءً من 4,229 ريالاً."), cta: L("Shop laptops", "تسوّق اللابتوبات"), href: "/category/laptops", theme: "light" },
             { image: { id: banner2.id, url: banner2.url }, eyebrow: L("Move more", "تحرّك أكثر"), title: L("Smart watches", "الساعات الذكية"), text: L("Apple Watch, Galaxy Watch, Pixel Watch and more.", "ساعة أبل وجالكسي ووتش وبكسل ووتش والمزيد."), cta: L("Explore wearables", "استكشف"), href: "/category/wearables", theme: "light" },
           ],
         }),
@@ -362,7 +373,7 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
         section("features", {
           title: L("Why shop with Nuqta", "لماذا تتسوق من نقطة"),
           items: [
-            { icon: "Truck", title: L("Fast delivery", "توصيل سريع"), text: L("Next-day in Amman, 1–3 days across Jordan.", "في اليوم التالي داخل عمّان، و1–3 أيام لباقي المحافظات.") },
+            { icon: "Truck", title: L("Fast delivery", "توصيل سريع"), text: L("Next-day in major cities, 2–5 days across the Kingdom.", "في اليوم التالي في المدن الرئيسية، و2–5 أيام لباقي مناطق المملكة.") },
             { icon: "ShieldCheck", title: L("100% genuine", "أصلي 100%"), text: L("Official stock with local warranty.", "منتجات رسمية مع كفالة محلية.") },
             { icon: "RotateCcw", title: L("Easy returns", "إرجاع سهل"), text: L("14 days to change your mind.", "14 يوماً لتغيير رأيك.") },
             { icon: "MessagesSquare", title: L("Real experts", "خبراء حقيقيون"), text: L("Live chat with people who know tech.", "محادثة مباشرة مع أشخاص يفهمون التقنية.") },
@@ -411,21 +422,10 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
   }
 
   // Menus
-  const header = await db.menu.create({ data: { key: "header", name: "Header navigation" } });
+  // Header + top bar: shared defaults (mega menus fill themselves from the category tree).
+  await buildDefaultNavigation();
   const item = (menuId: string, data: { label?: object; type: "URL" | "CATEGORY" | "PAGE" | "SHOP" | "BRAND"; refId?: string; url?: string; position: number; parentId?: string; highlight?: boolean }) =>
     db.menuItem.create({ data: { menuId, label: data.label ?? {}, type: data.type, refId: data.refId, url: data.url, position: data.position, parentId: data.parentId, highlight: data.highlight ?? false } });
-  const phones = await item(header.id, { type: "CATEGORY", refId: catIds.get("smartphones")!.id, position: 0 });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("iphones")!.id, position: 0, parentId: phones.id });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("samsung-galaxy")!.id, position: 1, parentId: phones.id });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("google-pixel")!.id, position: 2, parentId: phones.id });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("xiaomi-redmi")!.id, position: 3, parentId: phones.id });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("tablets")!.id, position: 1 });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("laptops")!.id, position: 2 });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("wearables")!.id, position: 3 });
-  await item(header.id, { type: "CATEGORY", refId: catIds.get("audio")!.id, position: 4 });
-  const acc = await item(header.id, { type: "CATEGORY", refId: catIds.get("accessories")!.id, position: 5 });
-  for (const [i, s] of ["chargers", "power-banks", "cables", "cases"].entries()) await item(header.id, { type: "CATEGORY", refId: catIds.get(s)!.id, position: i, parentId: acc.id });
-  await item(header.id, { type: "URL", url: "/shop?sale=1", label: L("Deals", "العروض"), position: 6, highlight: true });
 
   const fShop = await db.menu.create({ data: { key: "footer-shop", name: "Footer · Shop" } });
   for (const [i, s] of ["smartphones", "tablets", "laptops", "wearables", "audio", "accessories"].entries()) await item(fShop.id, { type: "CATEGORY", refId: catIds.get(s)!.id, position: i });
@@ -442,34 +442,34 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
   for (const [i, s] of ["privacy", "terms", "cookies"].entries()) await item(fLegal.id, { type: "PAGE", refId: pageIds.get(s), position: i });
 
   // Shipping
-  const jo = await db.shippingZone.create({ data: { name: "Jordan", countries: ["JO"], position: 0 } });
+  const sa = await db.shippingZone.create({ data: { name: "Saudi Arabia", countries: ["SA"], position: 0 } });
   await db.shippingMethod.createMany({
     data: [
-      { zoneId: jo.id, name: L("Standard delivery", "التوصيل العادي"), description: L("Free over 75 JOD", "مجاني فوق 75 ديناراً"), type: "FREE_OVER", cost: JOD(3), freeOver: JOD(75), minDays: 1, maxDays: 3, position: 0 },
-      { zoneId: jo.id, name: L("Express (Amman)", "توصيل سريع (عمّان)"), description: L("Same or next day for orders before 4 pm", "في نفس اليوم أو التالي للطلبات قبل 4 مساءً"), type: "FLAT", cost: JOD(5), minDays: 0, maxDays: 1, position: 1 },
-      { zoneId: jo.id, name: L("Store pickup", "الاستلام من المتجر"), description: L("Abdali Boulevard, Amman", "بوليفارد العبدلي، عمّان"), type: "PICKUP", cost: 0, minDays: 0, maxDays: 1, position: 2 },
+      { zoneId: sa.id, name: L("Standard delivery", "التوصيل العادي"), description: L("Free on orders over 299 SAR", "مجاني للطلبات فوق 299 ريال"), type: "FREE_OVER", cost: SAR(25), freeOver: SAR(299), minDays: 2, maxDays: 5, position: 0 },
+      { zoneId: sa.id, name: L("Express (Riyadh, Jeddah, Dammam)", "توصيل سريع (الرياض، جدة، الدمام)"), description: L("Next working day for orders before 4 pm", "يوم العمل التالي للطلبات قبل 4 مساءً"), type: "FLAT", cost: SAR(45), minDays: 1, maxDays: 2, position: 1 },
+      { zoneId: sa.id, name: L("Store pickup", "الاستلام من المتجر"), description: L("King Fahd Road, Riyadh", "طريق الملك فهد، الرياض"), type: "PICKUP", cost: 0, minDays: 0, maxDays: 1, position: 2 },
     ],
   });
-  const gcc = await db.shippingZone.create({ data: { name: "GCC", countries: ["SA", "AE", "KW", "QA", "BH", "OM"], position: 1 } });
-  await db.shippingMethod.create({ data: { zoneId: gcc.id, name: L("International express", "شحن دولي سريع"), type: "WEIGHT", cost: JOD(12), perKg: JOD(3), minDays: 3, maxDays: 5 } });
+  const gcc = await db.shippingZone.create({ data: { name: "GCC", countries: ["AE", "KW", "QA", "BH", "OM"], position: 1 } });
+  await db.shippingMethod.create({ data: { zoneId: gcc.id, name: L("GCC express", "شحن خليجي سريع"), type: "WEIGHT", cost: SAR(69), perKg: SAR(15), minDays: 3, maxDays: 6 } });
   const world = await db.shippingZone.create({ data: { name: "Rest of world", countries: [], position: 2 } });
-  await db.shippingMethod.create({ data: { zoneId: world.id, name: L("International", "شحن دولي"), type: "WEIGHT", cost: JOD(22), perKg: JOD(5), minDays: 5, maxDays: 10 } });
+  await db.shippingMethod.create({ data: { zoneId: world.id, name: L("International", "شحن دولي"), type: "WEIGHT", cost: SAR(119), perKg: SAR(25), minDays: 5, maxDays: 12 } });
 
   // Coupons & promotions
   await db.coupon.createMany({
     data: [
-      { code: "WELCOME10", name: L("Welcome 10% off", "خصم ترحيبي 10%"), type: "PERCENT", value: 1000, maxDiscount: JOD(25), firstOrderOnly: true, usageLimitPerCustomer: 1 },
-      { code: "FREESHIP", name: L("Free shipping", "شحن مجاني"), type: "FREE_SHIPPING", value: 0, minSubtotal: JOD(30) },
+      { code: "WELCOME10", name: L("Welcome 10% off", "خصم ترحيبي 10%"), type: "PERCENT", value: 1000, maxDiscount: SAR(150), firstOrderOnly: true, usageLimitPerCustomer: 1 },
+      { code: "FREESHIP", name: L("Free shipping", "شحن مجاني"), type: "FREE_SHIPPING", value: 0, minSubtotal: SAR(149) },
       { code: "ACCESS15", name: L("15% off accessories", "خصم 15% على الإكسسوارات"), type: "PERCENT", value: 1500, scope: "CATEGORIES", targetIds: [catIds.get("accessories")!.id], excludeSaleItems: true },
     ],
   });
-  await db.coupon.create({ data: { name: L("Spend 500, save 20 JOD", "أنفق 500 ووفّر 20 ديناراً"), type: "FIXED", value: JOD(20), minSubtotal: JOD(500), isAutomatic: true } });
+  await db.coupon.create({ data: { name: L("Spend 2,500 SAR, save 100 SAR", "أنفق 2,500 ريال ووفّر 100 ريال"), type: "FIXED", value: SAR(100), minSubtotal: SAR(2500), isAutomatic: true } });
 
   // Social (demo URLs)
   for (const p of ["instagram", "facebook", "tiktok", "youtube", "whatsapp"]) {
     await db.socialLink.update({
       where: { platform: p },
-      data: { isEnabled: true, url: p === "whatsapp" ? "https://wa.me/962790000000" : `https://www.${p}.com/nuqta.demo`, placements: ["footer", "contact", "about", "floating"] },
+      data: { isEnabled: true, url: p === "whatsapp" ? "https://wa.me/966500000000" : `https://www.${p}.com/nuqta.demo`, placements: ["footer", "contact", "about", "floating"] },
     });
   }
 
@@ -479,18 +479,18 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
     create: {
       key: "contact",
       value: {
-        phone: "+962 6 500 0000",
+        phone: "+966 11 500 0000",
         email: "hello@nuqta.test",
-        whatsapp: "+962790000000",
-        address: L("Abdali Boulevard, Amman, Jordan", "بوليفارد العبدلي، عمّان، الأردن"),
-        hours: L("Sat–Thu 10:00–22:00 · Fri closed", "السبت–الخميس 10:00–22:00 · الجمعة مغلق"),
-        mapEmbedUrl: "https://www.openstreetmap.org/export/embed.html?bbox=35.905%2C31.957%2C35.925%2C31.970&layer=mapnik",
+        whatsapp: "+966500000000",
+        address: L("King Fahd Road, Riyadh, Saudi Arabia", "طريق الملك فهد، الرياض، المملكة العربية السعودية"),
+        hours: L("Sat–Thu 10:00–23:00 · Fri 16:00–23:00", "السبت–الخميس 10:00–23:00 · الجمعة 16:00–23:00"),
+        mapEmbedUrl: "https://www.openstreetmap.org/export/embed.html?bbox=46.665%2C24.700%2C46.695%2C24.720&layer=mapnik&marker=24.7106%2C46.6799",
       },
     },
     update: {},
   });
-  await db.setting.upsert({ where: { key: "widgets" }, create: { key: "widgets", value: { whatsapp: { number: "+962790000000" } } }, update: {} });
-  await db.setting.upsert({ where: { key: "store" }, create: { key: "store", value: { email: "hello@nuqta.test", phone: "+962 6 500 0000", address: L("Abdali Boulevard, Amman, Jordan", "بوليفارد العبدلي، عمّان، الأردن") } }, update: {} });
+  await db.setting.upsert({ where: { key: "widgets" }, create: { key: "widgets", value: { whatsapp: { number: "966500000000" } } }, update: {} });
+  await db.setting.upsert({ where: { key: "store" }, create: { key: "store", value: { email: "hello@nuqta.test", phone: "+966 11 500 0000", address: L("King Fahd Road, Riyadh, Saudi Arabia", "طريق الملك فهد، الرياض، المملكة العربية السعودية") } }, update: {} });
   void brandIds;
 }
 
@@ -510,7 +510,7 @@ async function demoActivity() {
 
   const first = ["Ahmad", "Sara", "Yousef", "Rania", "Khaled", "Dana", "Hamza", "Noor", "Faris", "Leen", "Tareq", "Hala", "Zaid", "Maya", "Bashar", "Jana", "Omar", "Rawan", "Ali", "Salma", "Mohammad", "Aya", "Laith", "Tala"];
   const last = ["Al-Masri", "Haddad", "Nasser", "Khoury", "Odeh", "Saleh", "Zubi", "Hijazi", "Qasem", "Darwish", "Barakat", "Shami"];
-  const cities = ["Amman", "Irbid", "Zarqa", "Aqaba", "Salt", "Madaba"];
+  const cities = ["Riyadh", "Jeddah", "Dammam", "Mecca", "Medina", "Khobar"];
   const customers = [];
   for (let i = 0; i < 36; i++) {
     const name = `${first[i % first.length]} ${rand(last, i + 3)}`;
@@ -519,7 +519,7 @@ async function demoActivity() {
         data: {
           email: `${name.toLowerCase().replace(/[^a-z]+/g, ".")}${i}@example.com`,
           name,
-          phone: `+96279${(1000000 + i * 7919).toString().slice(0, 7)}`,
+          phone: `+9665${(10000000 + i * 79193).toString().slice(0, 8)}`,
           passwordHash: hash,
           locale: i % 3 === 0 ? "en" : "ar",
           createdAt: new Date(Date.now() - (80 - i * 2) * 86_400_000),
@@ -544,11 +544,11 @@ async function demoActivity() {
       const p = products[(i * 13 + l * 7) % products.length];
       const v = p.variants.length ? p.variants[(i + l) % p.variants.length] : null;
       const unit = v?.price ?? p.effectivePrice ?? p.price;
-      const qty = p.price < JOD(60) && i % 4 === 0 ? 2 : 1;
+      const qty = p.price < SAR(300) && i % 4 === 0 ? 2 : 1;
       items.push({ productId: p.id, variantId: v?.id, sku: v?.sku ?? p.sku, name: p.name as object, unitPrice: unit, regularUnitPrice: v?.price ?? p.price, quantity: qty, total: unit * qty });
     }
     const subtotal = items.reduce((s, it) => s + it.total, 0);
-    const shipping = subtotal >= JOD(75) ? 0 : JOD(3);
+    const shipping = subtotal >= SAR(299) ? 0 : SAR(25);
     const status = daysAgo < 2 ? rand(["pending", "processing", "paid"], i) : rand(statusPlan, i * 3);
     const paid = !["pending", "cancelled"].includes(status);
     const method = i % 4 === 0 ? "bank_transfer" : "cod";
@@ -557,12 +557,12 @@ async function demoActivity() {
         number: `NQ-${seq++}`,
         userId: guest ? null : cust.id,
         email: cust.email,
-        phone: cust.phone ?? "+962790000000",
+        phone: cust.phone ?? "+966500000000",
         customerName: cust.name,
         statusKey: status,
         paymentStatus: status === "refunded" ? "REFUNDED" : paid ? "PAID" : "UNPAID",
         paymentMethod: method,
-        currency: "JOD",
+        currency: "SAR",
         locale: cust.locale,
         subtotal,
         shippingTotal: shipping,
@@ -575,7 +575,7 @@ async function demoActivity() {
         completedAt: status === "completed" ? new Date(placedAt.getTime() + 2 * 86_400_000) : null,
         items: { create: items },
         history: { create: [{ toStatus: "pending", note: "Order placed", createdAt: placedAt }, ...(status !== "pending" ? [{ fromStatus: "pending", toStatus: status, createdAt: new Date(placedAt.getTime() + 3_600_000) }] : [])] },
-        ...(paid ? { payments: { create: { provider: method, amount: subtotal + shipping, currency: "JOD", status: status === "refunded" ? "REFUNDED" : "CAPTURED", createdAt: placedAt } } } : {}),
+        ...(paid ? { payments: { create: { provider: method, amount: subtotal + shipping, currency: "SAR", status: status === "refunded" ? "REFUNDED" : "CAPTURED", createdAt: placedAt } } } : {}),
       },
     });
     void order;
@@ -590,7 +590,7 @@ async function demoActivity() {
   const bodies = [
     { r: 5, t: L("Exactly as described", "تماماً كما هو موصوف"), b: L("Arrived the next day, sealed and with local warranty. Setup was effortless.", "وصل في اليوم التالي مغلقاً ومع كفالة محلية. الإعداد كان سهلاً جداً.") },
     { r: 5, t: L("Great service", "خدمة رائعة"), b: L("The team on live chat helped me pick the right storage size. Very happy.", "ساعدني فريق المحادثة المباشرة في اختيار السعة المناسبة. سعيد جداً.") },
-    { r: 4, t: L("Very good", "جيد جداً"), b: L("Excellent device. Delivery took two days to Irbid, which was fine.", "جهاز ممتاز. استغرق التوصيل يومين إلى إربد وكان ذلك مقبولاً.") },
+    { r: 4, t: L("Very good", "جيد جداً"), b: L("Excellent device. Delivery took two days to Abha, which was fine.", "جهاز ممتاز. استغرق التوصيل يومين إلى أبها وكان ذلك مقبولاً.") },
     { r: 5, t: L("Best price I found", "أفضل سعر وجدته"), b: L("Cheaper than other stores and genuine. Will order again.", "أرخص من المتاجر الأخرى وأصلي. سأطلب مرة أخرى.") },
     { r: 3, t: L("Good, packaging could be better", "جيد، التغليف يمكن أن يكون أفضل"), b: L("Product is great but the outer box was a bit dented.", "المنتج رائع لكن الصندوق الخارجي كان به بعض الانبعاج.") },
     { r: 4, t: L("Solid", "ممتاز"), b: L("Battery life is impressive. Cash on delivery made it easy.", "عمر البطارية مذهل. الدفع عند الاستلام جعل الأمر سهلاً.") },
@@ -646,7 +646,7 @@ async function demoActivity() {
   for (const [i, term] of terms.entries()) await db.searchTerm.create({ data: { term, count: 120 - i * 9, lastResults: 3 + (i % 4) } });
 
   // A couple of contact messages and notifications so the admin isn't empty.
-  await db.contactSubmission.create({ data: { name: "Rami S.", email: "rami@example.com", phone: "+962791234567", subject: "Corporate order", message: "Hi, we'd like a quote for 15 iPhone 17 units for our office. Do you offer business invoices?", status: "NEW" } });
+  await db.contactSubmission.create({ data: { name: "Rami S.", email: "rami@example.com", phone: "+966551234567", subject: "Corporate order", message: "Hi, we'd like a quote for 15 iPhone 17 units for our office. Do you offer business invoices?", status: "NEW" } });
   await db.notification.create({ data: { audience: "STAFF", permission: "inventory.manage", event: "PRODUCT_LOW_STOCK", title: L("Low stock", "مخزون منخفض"), body: L("Galaxy S25 Ultra Clear Case — 3 left", "غطاء شفاف لجالكسي S25 ألترا — متبقي 3"), link: "/admin/inventory", severity: "WARNING" } });
 }
 

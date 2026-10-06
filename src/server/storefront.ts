@@ -5,6 +5,7 @@ import { getManySettings } from "./settings/service";
 import { getCurrentUser } from "./auth/session";
 import { requestMeta } from "./request";
 import { switchableCurrencies, moneyContext } from "./commerce/currency";
+import { currencyForCountry } from "@/config/currencies";
 import { findCart } from "./commerce/cart";
 import { freeShippingThreshold } from "./commerce/shipping";
 import { publicIntegrationConfig } from "./integrations/service";
@@ -43,8 +44,8 @@ export function themeCss(a: Settings<"appearance">) {
 }
 
 export const getStorefrontShell = cache(async (locale: "ar" | "en") => {
-  const [settings, user, meta, currencies, cart, integrations, header, footerShop, footerHelp, footerCompany, footerLegal, social, tree] = await Promise.all([
-    getManySettings(["store", "appearance", "seo", "privacy", "widgets", "ticker", "contact", "chat", "geo", "maintenance", "notifications"]),
+  const [settings, user, meta, currencies, cart, integrations, header, footerShop, footerHelp, footerCompany, footerLegal, social, tree, topbar] = await Promise.all([
+    getManySettings(["store", "appearance", "seo", "privacy", "widgets", "ticker", "contact", "chat", "geo", "maintenance", "notifications", "fx"]),
     getCurrentUser(),
     requestMeta(),
     switchableCurrencies(),
@@ -57,9 +58,13 @@ export const getStorefrontShell = cache(async (locale: "ar" | "en") => {
     getMenu("footer-legal", locale),
     getSocialLinks(),
     categoryTree(locale),
+    getMenu("topbar", locale),
   ]);
   const jar = await cookies();
-  const displayCurrency = jar.get("NQ_CURRENCY")?.value ?? null;
+  // An explicit choice (cookie) always wins; otherwise suggest the shopper's
+  // country currency. Nothing is forced — the selector stays available.
+  const visitorCountry = (settings.geo.detectFromHeaders ? meta.country : null) ?? meta.languageRegion;
+  const displayCurrency = jar.get("NQ_CURRENCY")?.value ?? (settings.fx.currencyByCountry ? currencyForCountry(visitorCountry) : null);
   const money = await moneyContext(locale, displayCurrency);
   const wishlist = user ? (await db.wishlistItem.findMany({ where: { userId: user.id }, select: { productId: true } })).map((w) => w.productId) : [];
   const ga = integrations.google_analytics as { measurementId?: string } | undefined;
@@ -69,10 +74,10 @@ export const getStorefrontShell = cache(async (locale: "ar" | "en") => {
     locale,
     storeName: t(settings.store.name, locale),
     money,
-    currencies: currencies.map((c) => ({ code: c.code, symbol: t(c.symbol, locale), name: t(c.name, locale) })),
+    currencies: currencies.map((c) => ({ code: c.code, symbol: t(c.symbol, locale), name: t(c.name, locale), flag: c.flag })),
     user: user ? { id: user.id, name: user.name, email: user.email } : null,
     defaultCountry: settings.geo.defaultCountry,
-    detectedCountry: settings.geo.detectFromHeaders ? meta.country : null,
+    detectedCountry: visitorCountry,
     card: settings.appearance.productCard,
     badges: settings.appearance.badges,
     freeShippingThreshold: await freeShippingThreshold(meta.country ?? settings.geo.defaultCountry),
@@ -93,7 +98,7 @@ export const getStorefrontShell = cache(async (locale: "ar" | "en") => {
     settings,
     cartCount: cart?.items.reduce((s, i) => s + i.quantity, 0) ?? 0,
     wishlist,
-    menus: { header, footerShop, footerHelp, footerCompany, footerLegal },
+    menus: { header, topbar, footerShop, footerHelp, footerCompany, footerLegal },
     social,
     categories: tree,
     verification: {

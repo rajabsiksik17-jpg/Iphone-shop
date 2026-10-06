@@ -28,6 +28,8 @@ const PAYMENT_ICONS: Record<string, { path: string; label: string }> = {
   mastercard: { path: siMastercard.path, label: "Mastercard" },
   applepay: { path: siApplepay.path, label: "Apple Pay" },
 };
+// Methods without a simple-icons logo are shown as compact wordmarks.
+const TEXT_BADGES: Record<string, string> = { cod: "COD", mada: "mada", stcpay: "stc pay", tabby: "tabby", tamara: "tamara" };
 
 export async function Footer(p: FooterProps) {
   const t = await getTranslations("footer");
@@ -129,9 +131,9 @@ export async function Footer(p: FooterProps) {
                       <path d={PAYMENT_ICONS[k].path} />
                     </svg>
                   </span>
-                ) : k === "cod" ? (
+                ) : TEXT_BADGES[k] ? (
                   <span key={k} className={cn("grid h-7 place-items-center rounded-md px-2 text-[10px] font-bold", dark ? "bg-white/90 text-neutral-900" : "bg-bg text-fg ring-1 ring-border")}>
-                    COD
+                    {TEXT_BADGES[k]}
                   </span>
                 ) : null,
               )}

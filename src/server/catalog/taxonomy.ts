@@ -5,6 +5,7 @@ import { t } from "@/lib/i18n-text";
 import { toTree, type Tree } from "@/lib/category-tree";
 import { imageDTO } from "./dto";
 import { normalizeQuery, searchProductIds, visibleWhere } from "./listing";
+import { labelScore, normalizeText } from "@/lib/search-text";
 import { cardInclude, toCard } from "./dto";
 import { getSettings } from "../settings/service";
 import type { ImageDTO } from "@/types/catalog";
@@ -108,37 +109,73 @@ export const getBrandBySlug = cache(async (slug: string, locale: string) => {
   };
 });
 
-/** Instant search: products + matching categories/brands, plus popular terms. */
-export async function searchSuggestions(q: string, locale: string) {
+type Shortcut = { href: string; label: string; image: ImageDTO | null; count?: number };
+export type SearchSuggestions = { products: ReturnType<typeof toCard>[]; categories: Shortcut[]; brands: Shortcut[]; popular: string[]; didYouMean: string | null };
+
+// Categories and brands are few: keep them in memory and match with the same
+// normalization/phonetic rules as products (typos, Arabic ↔ English).
+const g = globalThis as unknown as { __searchLabels?: { at: number; data: Awaited<ReturnType<typeof loadLabels>> }; __suggestCache?: Map<string, { at: number; value: SearchSuggestions }> };
+async function loadLabels() {
+  const [cats, brands] = await Promise.all([
+    db.category.findMany({ where: { isActive: true }, select: { fullSlug: true, name: true, depth: true, image: true, _count: { select: { products: true } } } }),
+    db.brand.findMany({ where: { isActive: true }, select: { slug: true, name: true, logo: true, _count: { select: { products: { where: visibleWhere() } } } } }),
+  ]);
+  return { cats, brands };
+}
+async function labels() {
+  if (!g.__searchLabels || Date.now() - g.__searchLabels.at > 60_000) g.__searchLabels = { at: Date.now(), data: await loadLabels() };
+  return g.__searchLabels.data;
+}
+const bestLabelScore = (q: string, name: unknown) => Math.max(labelScore(q, t(name, "en")), labelScore(q, t(name, "ar")));
+
+/** Instant search: ranked products, fuzzy category/brand shortcuts, popular terms, "did you mean". */
+export async function searchSuggestions(q: string, locale: string): Promise<SearchSuggestions> {
   const term = normalizeQuery(q);
-  const store = await getSettings("store");
+  const cache = (g.__suggestCache ??= new Map());
+  const key = `${locale}:${term}`;
+  const hit = cache.get(key);
+  if (hit && Date.now() - hit.at < 30_000) return hit.value;
+
+  const [store, l] = await Promise.all([getSettings("store"), labels()]);
+  let value: SearchSuggestions;
   if (!term) {
     const popular = await db.searchTerm.findMany({ where: { lastResults: { gt: 0 } }, orderBy: { count: "desc" }, take: 8 });
-    return { products: [], categories: [], brands: [], popular: popular.map((p) => p.term) };
+    // Shown before typing: the main categories and the brands people buy.
+    value = {
+      products: [],
+      categories: l.cats.filter((c) => c.depth === 0 && c._count.products >= 0).slice(0, 8).map((c) => ({ href: `/category/${c.fullSlug}`, label: t(c.name, locale), image: imageDTO(c.image, locale, t(c.name, locale)) })),
+      brands: l.brands.filter((b) => b._count.products > 0).sort((a, b) => b._count.products - a._count.products).slice(0, 8).map((b) => ({ href: `/brand/${b.slug}`, label: t(b.name, locale), image: imageDTO(b.logo, locale, t(b.name, locale)), count: b._count.products })),
+      popular: popular.map((p) => p.term),
+      didYouMean: null,
+    };
+  } else {
+    const ids = await searchProductIds(term, 6);
+    const rows = ids.length ? await db.product.findMany({ where: { AND: [visibleWhere(new Date(), "search"), { id: { in: ids.map((i) => i.id) } }] }, include: cardInclude }) : [];
+    const order = new Map(ids.map((i, idx) => [i.id, idx]));
+    rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+    const cats = l.cats.map((c) => ({ c, s: bestLabelScore(term, c.name) - c.depth * 0.01 })).filter((x) => x.s >= 0.45).sort((a, b) => b.s - a.s).slice(0, 4);
+    const brands = l.brands.map((b) => ({ b, s: bestLabelScore(term, b.name) })).filter((x) => x.s >= 0.45).sort((a, b) => b.s - a.s).slice(0, 4);
+    // "Did you mean": when the query isn't literally in any result, offer the
+    // closest brand or product name (what the shopper most likely meant).
+    const literal = rows.some((r) => normalizeText([t(r.name, "en"), t(r.name, "ar"), t(r.brand?.name, "en"), t(r.brand?.name, "ar")].join(" ")).includes(term));
+    let didYouMean: string | null = null;
+    if (!literal && rows[0]) {
+      // The single word from the top result's name/brand closest to what was typed.
+      const words = [t(rows[0].brand?.name, locale), t(rows[0].name, locale)].join(" ").split(/\s+/).filter((w) => w.length >= 3);
+      const best = words.map((w) => ({ w, s: labelScore(term, w) })).sort((a, b) => b.s - a.s)[0];
+      didYouMean = best && best.s >= 0.45 ? best.w : null;
+    }
+    value = {
+      products: rows.map((r) => toCard(r, locale, store)),
+      categories: cats.map(({ c }) => ({ href: `/category/${c.fullSlug}`, label: t(c.name, locale), image: imageDTO(c.image, locale, t(c.name, locale)) })),
+      brands: brands.map(({ b }) => ({ href: `/brand/${b.slug}`, label: t(b.name, locale), image: imageDTO(b.logo, locale, t(b.name, locale)), count: b._count.products })),
+      popular: [],
+      didYouMean,
+    };
   }
-  const like = `%${term}%`;
-  const [ids, categories, brands] = await Promise.all([
-    searchProductIds(term, 6),
-    db.$queryRaw<{ fullSlug: string; name: unknown }[]>`
-      SELECT "fullSlug", "name" FROM "Category"
-      WHERE "isActive" = true AND (lower("name"->>'en') LIKE ${like} OR "name"->>'ar' LIKE ${like} OR "slug" LIKE ${like})
-      ORDER BY "depth" ASC LIMIT 4`,
-    db.$queryRaw<{ slug: string; name: unknown }[]>`
-      SELECT "slug", "name" FROM "Brand"
-      WHERE "isActive" = true AND (lower("name"->>'en') LIKE ${like} OR "name"->>'ar' LIKE ${like} OR "slug" LIKE ${like})
-      LIMIT 4`,
-  ]);
-  const rows = ids.length
-    ? await db.product.findMany({ where: { AND: [visibleWhere(new Date(), "search"), { id: { in: ids.map((i) => i.id) } }] }, include: cardInclude })
-    : [];
-  const order = new Map(ids.map((i, idx) => [i.id, idx]));
-  rows.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-  return {
-    products: rows.map((r) => toCard(r, locale, store)),
-    categories: categories.map((c) => ({ href: `/category/${c.fullSlug}`, label: t(c.name, locale) })),
-    brands: brands.map((b) => ({ href: `/brand/${b.slug}`, label: t(b.name, locale) })),
-    popular: [] as string[],
-  };
+  if (cache.size > 300) cache.clear();
+  cache.set(key, { at: Date.now(), value });
+  return value;
 }
 
 /** Count searches (aggregated, no personal data) to power "popular searches". */

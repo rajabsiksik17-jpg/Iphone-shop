@@ -3,6 +3,8 @@ import { cache } from "react";
 import { db } from "../db";
 import { t } from "@/lib/i18n-text";
 import { imageDTO } from "../catalog/dto";
+import { categoryTree, type CategoryNode } from "../catalog/taxonomy";
+import type { Tree } from "@/lib/category-tree";
 import { parseSectionData, sectionStyleSchema } from "@/cms/sections";
 
 export const getPage = cache(async (slug: string, opts: { preview?: boolean } = {}) => {
@@ -23,23 +25,67 @@ export const getPage = cache(async (slug: string, opts: { preview?: boolean } = 
   };
 });
 
-export type ResolvedMenuItem = { id: string; label: string; href: string; newTab: boolean; highlight: boolean; children: ResolvedMenuItem[] };
+export type ResolvedMenuItem = {
+  id: string;
+  label: string;
+  href: string;
+  newTab: boolean;
+  highlight: boolean;
+  icon: string | null;
+  image: string | null;
+  badge: string | null;
+  /** How the desktop dropdown renders: plain list, category mega panel, brand grid. */
+  kind: "link" | "all-categories" | "categories" | "brands";
+  children: ResolvedMenuItem[];
+};
 
+/**
+ * Resolve a menu for rendering. Category items with no hand-made children
+ * (and autoChildren on) inherit their subcategories from the category tree,
+ * so new categories appear in navigation without editing the menu.
+ * "All categories" and "All brands" items expand automatically.
+ */
 export const getMenu = cache(async (key: string, locale: string): Promise<ResolvedMenuItem[]> => {
-  const menu = await db.menu.findUnique({ where: { key }, include: { items: { orderBy: { position: "asc" } } } });
+  const menu = await db.menu.findUnique({ where: { key }, include: { items: { where: { isVisible: true }, orderBy: { position: "asc" } } } });
   if (!menu) return [];
   const ids = (type: string) => menu.items.filter((i) => i.type === type && i.refId).map((i) => i.refId!);
-  const [categories, brands, pages, products] = await Promise.all([
-    db.category.findMany({ where: { id: { in: ids("CATEGORY") }, isActive: true }, select: { id: true, fullSlug: true, name: true } }),
+  const needsTree = menu.items.some((i) => i.type === "ALL_CATEGORIES" || (i.type === "CATEGORY" && i.autoChildren));
+  const needsBrands = menu.items.some((i) => i.type === "ALL_BRANDS");
+  const [categories, brands, pages, products, tree, brandList] = await Promise.all([
+    db.category.findMany({ where: { id: { in: ids("CATEGORY") }, isActive: true }, select: { id: true, fullSlug: true, name: true, icon: true, image: { select: { url: true } } } }),
     db.brand.findMany({ where: { id: { in: ids("BRAND") }, isActive: true }, select: { id: true, slug: true, name: true } }),
     db.page.findMany({ where: { id: { in: ids("PAGE") }, status: "PUBLISHED" }, select: { id: true, slug: true, title: true } }),
     db.product.findMany({ where: { id: { in: ids("PRODUCT") }, status: "ACTIVE" }, select: { id: true, slug: true, name: true } }),
+    needsTree ? categoryTree(locale) : Promise.resolve([] as Tree<CategoryNode>[]),
+    needsBrands ? db.brand.findMany({ where: { isActive: true }, orderBy: [{ isFeatured: "desc" }, { position: "asc" }], take: 24, select: { slug: true, name: true, logo: { select: { url: true } } } }) : Promise.resolve([]),
   ]);
-  const resolve = (i: (typeof menu.items)[number]): { href: string; fallback: string } | null => {
+
+  const fromNode = (n: Tree<CategoryNode>, depth: number): ResolvedMenuItem => ({
+    id: `cat-${n.id}`,
+    label: n.name,
+    href: `/category/${n.fullSlug}`,
+    newTab: false,
+    highlight: false,
+    icon: n.icon,
+    image: n.image?.url ?? null,
+    badge: null,
+    kind: "link",
+    children: depth < 3 ? n.children.map((c) => fromNode(c, depth + 1)) : [],
+  });
+  const findNode = (nodes: Tree<CategoryNode>[], id: string): Tree<CategoryNode> | null => {
+    for (const n of nodes) {
+      if (n.id === id) return n;
+      const hit = findNode(n.children, id);
+      if (hit) return hit;
+    }
+    return null;
+  };
+
+  const resolve = (i: (typeof menu.items)[number]): { href: string; fallback: string; image?: string | null; icon?: string | null } | null => {
     switch (i.type) {
       case "CATEGORY": {
         const c = categories.find((x) => x.id === i.refId);
-        return c ? { href: `/category/${c.fullSlug}`, fallback: t(c.name, locale) } : null;
+        return c ? { href: `/category/${c.fullSlug}`, fallback: t(c.name, locale), image: c.image?.url, icon: c.icon } : null;
       }
       case "BRAND": {
         const b = brands.find((x) => x.id === i.refId);
@@ -55,6 +101,10 @@ export const getMenu = cache(async (key: string, locale: string): Promise<Resolv
       }
       case "SHOP":
         return { href: "/shop", fallback: locale === "ar" ? "المتجر" : "Shop" };
+      case "ALL_CATEGORIES":
+        return { href: "/shop", fallback: locale === "ar" ? "كل التصنيفات" : "All categories" };
+      case "ALL_BRANDS":
+        return { href: "/brands", fallback: locale === "ar" ? "العلامات التجارية" : "Brands" };
       default:
         return i.url ? { href: i.url, fallback: i.url } : null;
     }
@@ -65,7 +115,23 @@ export const getMenu = cache(async (key: string, locale: string): Promise<Resolv
       .flatMap((i) => {
         const r = resolve(i);
         if (!r) return [];
-        return [{ id: i.id, label: t(i.label, locale) || r.fallback, href: r.href, newTab: i.openInNewTab, highlight: i.highlight, children: build(i.id) }];
+        let children = build(i.id);
+        let kind: ResolvedMenuItem["kind"] = "link";
+        if (i.type === "ALL_CATEGORIES") {
+          kind = "all-categories";
+          children = tree.map((n) => fromNode(n, 1));
+        } else if (i.type === "ALL_BRANDS") {
+          kind = "brands";
+          children = brandList.map((b) => ({ id: `brand-${b.slug}`, label: t(b.name, locale), href: `/brand/${b.slug}`, newTab: false, highlight: false, icon: null, image: b.logo?.url ?? null, badge: null, kind: "link" as const, children: [] }));
+        } else if (i.type === "CATEGORY" && !children.length && i.autoChildren && i.refId) {
+          const node = findNode(tree, i.refId);
+          if (node?.children.length) {
+            kind = "categories";
+            children = node.children.map((c) => fromNode(c, 1));
+          }
+        } else if (i.type === "CATEGORY" && children.length) kind = "categories";
+        const badge = t(i.badge, locale) || null;
+        return [{ id: i.id, label: t(i.label, locale) || r.fallback, href: r.href, newTab: i.openInNewTab, highlight: i.highlight, icon: i.icon ?? r.icon ?? null, image: i.image ?? r.image ?? null, badge, kind, children }];
       });
   return build(null);
 });

@@ -64,6 +64,10 @@ const ar: Messages = {
     lightMode: "الوضع الفاتح",
   },
   header: {
+    shopAll: "تسوّق كل {name}",
+    searchCurrency: "ابحث عن عملة…",
+    currency: "العملة: {code}",
+    language: "اللغة",
     freeShippingOver: "توصيل مجاني للطلبات فوق {amount}",
     help: "المساعدة",
     trackOrder: "تتبع الطلب",
@@ -88,6 +92,7 @@ const ar: Messages = {
     askUs: "لم تجد ما تبحث عنه؟ اسألنا وسنوفّره لك",
     browseCategories: "تصفّح التصنيفات",
     trending: "الأكثر رواجاً الآن",
+    didYouMean: "هل تقصد",
     clearRecent: "مسح",
   },
   product: {

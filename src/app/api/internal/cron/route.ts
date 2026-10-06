@@ -5,6 +5,7 @@ import { logger, errorMessage } from "@/server/logger";
 import { refreshScheduledPrices } from "@/server/catalog/derived";
 import { expireUnpaidOrders } from "@/server/commerce/orders";
 import { autoCloseInactive } from "@/server/chat/service";
+import { refreshRates } from "@/server/commerce/fx";
 import { db } from "@/server/db";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
   await job("salePrices", refreshScheduledPrices);
   await job("unpaidOrders", expireUnpaidOrders);
   await job("chatAutoClose", autoCloseInactive);
+  // Self-throttled: only calls the provider when rates are older than the configured interval.
+  await job("exchangeRates", () => refreshRates());
   await job("cleanup", async () => {
     const now = new Date();
     const [sessions, otps, resets] = await Promise.all([

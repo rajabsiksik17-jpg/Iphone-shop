@@ -94,3 +94,12 @@ export async function previewTemplateAction(key: string, locale: string, overrid
     { revalidate: false },
   );
 }
+
+export async function saveFxSettingsAction(input: unknown) {
+  return adminRun("settings.general", (s) => data.saveFxSettings(input, s));
+}
+
+/** Fetch exchange rates now (ignores the schedule). */
+export async function refreshRatesAction() {
+  return adminRun("settings.general", (s) => data.refreshRatesNow(s));
+}

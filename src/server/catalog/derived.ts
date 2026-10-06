@@ -2,6 +2,7 @@ import "server-only";
 import { db, type Tx } from "../db";
 import { getSettings } from "../settings/service";
 import { allLocales } from "@/lib/i18n-text";
+import { normalizeText, phoneticKey, romanizeArabic, stemText } from "@/lib/search-text";
 import { priceRange, resolvePrice, stockState, variantPriceSource } from "@/lib/pricing";
 
 /**
@@ -53,27 +54,39 @@ export async function refreshProductDerived(productId: string, tx: Tx = db) {
     status = stockState({ track: p.trackInventory, stock: p.stock, lowThreshold: threshold, allowBackorder: p.allowBackorder });
   }
 
-  const searchText = [
-    allLocales(p.name),
-    p.sku,
-    p.barcode,
-    p.modelNumber,
-    p.manufacturer,
-    allLocales(p.brand?.name),
-    ...p.categories.map((c) => allLocales(c.category.name)),
-    ...p.attributes.flatMap((a) => [...a.values.map((v) => allLocales(v.value.label)), allLocales(a.textValue)]),
-    ...p.variants.flatMap((v) => [v.sku, ...v.options.map((o) => allLocales(o.value.label))]),
-    ...p.tags.map((t) => allLocales(t.tag.name)),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .slice(0, 4000);
+  const doc = normalizeText(
+    [
+      allLocales(p.name),
+      p.sku,
+      p.barcode,
+      p.modelNumber,
+      p.manufacturer,
+      allLocales(p.brand?.name),
+      ...p.categories.map((c) => allLocales(c.category.name)),
+      ...p.attributes.flatMap((a) => [...a.values.map((v) => allLocales(v.value.label)), allLocales(a.textValue)]),
+      ...p.variants.flatMap((v) => [v.sku, ...v.options.map((o) => allLocales(o.value.label))]),
+      ...p.tags.map((t) => allLocales(t.tag.name)),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  // Arabic stems appended so "ساعة" finds "الساعات الذكية".
+  const stems = stemText(doc);
+  // Romanized Arabic keeps fuzzy Arabic matching locale-independent (see romanizeArabic).
+  const searchText = `${doc} ${stems} ${romanizeArabic(`${doc} ${stems}`)}`.replace(/\s+/g, " ").trim().slice(0, 8000);
+  // Ranking fields: the name and brand get their own boosts; phonetic keys
+  // cover name, brand, model, categories and tags (the words people type).
+  const searchTitle = normalizeText(allLocales(p.name)).slice(0, 500);
+  const searchBrand = normalizeText(allLocales(p.brand?.name)).slice(0, 200);
+  const searchPhonetic = phoneticKey(
+    [allLocales(p.name), allLocales(p.brand?.name), p.modelNumber, ...p.categories.map((c) => allLocales(c.category.name)), ...p.tags.map((t) => allLocales(t.tag.name))]
+      .filter(Boolean)
+      .join(" "),
+  ).slice(0, 1000);
 
   await tx.product.update({
     where: { id: productId },
-    data: { effectivePrice, maxPrice, discountPercent, onSale, stockStatus: status, searchText, ...(p.type === "VARIABLE" ? { stock } : {}) },
+    data: { effectivePrice, maxPrice, discountPercent, onSale, stockStatus: status, searchText, searchTitle, searchBrand, searchPhonetic, ...(p.type === "VARIABLE" ? { stock } : {}) },
   });
   return { effectivePrice, onSale, stockStatus: status, stock };
 }

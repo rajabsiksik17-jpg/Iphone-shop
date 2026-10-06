@@ -4,6 +4,9 @@ import { db } from "../db";
 import { Errors } from "../errors";
 import { audit } from "../audit";
 import { invalidateCurrencies } from "../commerce/currency";
+import { refreshRates } from "../commerce/fx";
+import { getSettings, patchSettings } from "../settings/service";
+import { CURRENCY_CATALOG } from "@/config/currencies";
 import { EMAIL_TEMPLATES, templateDef } from "../email/defaults";
 import { renderTemplate } from "../email/mailer";
 import { sanitizeTemplateHtml } from "../email/render";
@@ -20,6 +23,33 @@ export async function currencyList() {
   return rows.map((c) => ({ ...c, name: c.name as Record<string, string>, symbol: c.symbol as Record<string, string> }));
 }
 
+/** Everything the currencies screen needs: table, rate-feed status and the catalogue to add from. */
+export async function currencyPage() {
+  const [rows, fx, orders] = await Promise.all([currencyList(), getSettings("fx"), db.order.count()]);
+  return {
+    rows,
+    hasOrders: orders > 0,
+    fx: { autoUpdate: fx.autoUpdate, intervalHours: fx.intervalHours, currencyByCountry: fx.currencyByCountry, provider: fx.provider, lastAttemptAt: fx.lastAttemptAt, lastSuccessAt: fx.lastSuccessAt, lastError: fx.lastError },
+    catalog: CURRENCY_CATALOG.map((c) => ({ code: c.code, name: c.name, symbol: c.symbol, decimals: c.decimals, flag: c.flag, symbolPosition: "AFTER" as const })),
+  };
+}
+
+const fxFormSchema = z.object({ autoUpdate: z.boolean(), intervalHours: z.number().int().min(1).max(168), currencyByCountry: z.boolean() });
+
+/** Only the admin-editable feed options; status fields are written by the refresher. */
+export async function saveFxSettings(raw: unknown, staff: CurrentStaff) {
+  const p = fxFormSchema.parse(raw);
+  await patchSettings("fx", p);
+  await audit({ actor: staff, action: "settings.updated", entityType: "settings", entityId: "fx", summary: `auto=${p.autoUpdate} every ${p.intervalHours}h byCountry=${p.currencyByCountry}` });
+}
+
+export async function refreshRatesNow(staff: CurrentStaff) {
+  const r = await refreshRates({ force: true });
+  await audit({ actor: staff, action: "currencies.rates_refreshed", summary: r.message });
+  if (!r.ok) throw Errors.conflict("rates_failed");
+  return r;
+}
+
 const currencySchema = z.object({
   code: z.string().trim().toUpperCase().regex(/^[A-Z]{3}$/),
   name: localized({ required: true, max: 60 }),
@@ -31,6 +61,9 @@ const currencySchema = z.object({
   rate: z.number().positive().max(1_000_000),
   isActive: z.boolean(),
   isBase: z.boolean(),
+  flag: z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/).nullable().default(null),
+  // false = the admin pins the rate; the feed never overwrites it.
+  autoRate: z.boolean().default(true),
 });
 
 /**
@@ -47,14 +80,22 @@ export async function saveCurrencies(raw: unknown, staff: CurrentStaff) {
   const currentBase = await db.currency.findFirst({ where: { isBase: true } });
   const hasOrders = (await db.order.count()) > 0;
   if (currentBase && hasOrders && (bases[0].code !== currentBase.code || bases[0].decimals !== currentBase.decimals)) throw Errors.conflict("base_locked");
+  const before = new Map((await db.currency.findMany()).map((c) => [c.code, c]));
   await db.$transaction(async (tx) => {
     await tx.currency.deleteMany({ where: { code: { notIn: [...codes] } } });
     for (const [position, c] of list.entries()) {
-      const data = { ...c, rate: c.isBase ? 1 : c.rate, isActive: c.isBase ? true : c.isActive, position };
+      const prev = before.get(c.code);
+      // A hand-edited rate is "fresh as of now"; feed rates keep the feed's timestamp.
+      const manualChange = !c.autoRate && !c.isBase && (!prev || prev.rate !== c.rate);
+      // Back to automatic: the feed's sanity guard must not compare against a hand-typed rate.
+      const backToAuto = c.autoRate && prev && !prev.autoRate;
+      const data = { ...c, rate: c.isBase ? 1 : c.rate, isActive: c.isBase ? true : c.isActive, position, ...(manualChange ? { rateUpdatedAt: new Date() } : backToAuto ? { rateUpdatedAt: null } : {}) };
       await tx.currency.upsert({ where: { code: c.code }, create: data, update: data });
     }
   });
   invalidateCurrencies();
+  // New or newly-automatic currencies get a real rate straight away (best effort).
+  if (list.some((c) => c.autoRate && !c.isBase && (!before.has(c.code) || !before.get(c.code)!.autoRate))) await refreshRates({ force: true }).catch(() => null);
   await audit({ actor: staff, action: "currencies.updated", summary: list.map((c) => `${c.code}${c.isBase ? "*" : ""}:${c.rate}`).join(", ") });
 }
 

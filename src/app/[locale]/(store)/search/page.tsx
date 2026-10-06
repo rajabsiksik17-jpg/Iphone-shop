@@ -45,6 +45,15 @@ export default async function SearchPage({ params, searchParams }: Props) {
       <header className="mx-auto max-w-3xl text-center">
         <h1 className="text-balance text-3xl font-semibold tracking-tight md:text-4xl">{q ? t("resultsFor", { q }) : t("title")}</h1>
         <SearchField defaultValue={q} className="mt-6" />
+        {related?.didYouMean && (
+          <p className="mt-4 text-sm text-muted">
+            {t("didYouMean")}{" "}
+            <Link href={`/search?q=${encodeURIComponent(related.didYouMean)}`} className="font-semibold text-accent hover:underline">
+              {related.didYouMean}
+            </Link>
+            {locale === "ar" ? "؟" : "?"}
+          </p>
+        )}
         {related && (related.categories.length > 0 || related.brands.length > 0) && (
           <nav aria-label={t("categories")} className="mt-5 flex flex-wrap justify-center gap-2">
             {[...related.categories, ...related.brands].map((l) => (

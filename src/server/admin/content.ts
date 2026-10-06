@@ -342,7 +342,7 @@ export async function menuList(locale: string) {
       id: m.id,
       key: m.key,
       name: m.name,
-      items: m.items.map((i) => ({ id: i.id, parentId: i.parentId, label: i.label as Record<string, string>, type: i.type, refId: i.refId, url: i.url ?? "", openInNewTab: i.openInNewTab, highlight: i.highlight })),
+      items: m.items.map((i) => ({ id: i.id, parentId: i.parentId, label: i.label as Record<string, string>, type: i.type, refId: i.refId, url: i.url ?? "", openInNewTab: i.openInNewTab, highlight: i.highlight, icon: i.icon, image: i.image, badge: (i.badge ?? {}) as Record<string, string>, autoChildren: i.autoChildren, isVisible: i.isVisible })),
     })),
     refs: {
       pages: pages.map((p) => ({ id: p.id, name: `${t(p.title, locale) || p.slug} (/${p.slug === "home" ? "" : p.slug})` })),
@@ -357,12 +357,21 @@ const menuItemSchema = z.object({
   id: z.string().max(64),
   parentId: z.string().max(64).nullable(),
   label: lt(120),
-  type: z.enum(["URL", "PAGE", "CATEGORY", "BRAND", "PRODUCT", "SHOP"]),
+  type: z.enum(["URL", "PAGE", "CATEGORY", "BRAND", "PRODUCT", "SHOP", "ALL_CATEGORIES", "ALL_BRANDS"]),
   refId: z.string().max(64).nullable(),
   url: safeUrl,
   openInNewTab: z.boolean(),
   highlight: z.boolean(),
+  icon: z.string().trim().max(120).nullable().default(null),
+  // Uploaded media URL (our storage) — relative or https only.
+  image: z.string().trim().max(500).regex(/^(\/(?!\/)|https:\/\/)/).nullable().default(null),
+  badge: lt(24),
+  autoChildren: z.boolean().default(true),
+  isVisible: z.boolean().default(true),
 });
+
+/** Types that point at nothing: their href and children are generated. */
+const GENERATED = ["URL", "SHOP", "ALL_CATEGORIES", "ALL_BRANDS"];
 
 export const menuSchema = z.object({ name: z.string().trim().min(1).max(80), items: z.array(menuItemSchema).max(200) });
 
@@ -397,7 +406,7 @@ export async function saveMenu(id: string, raw: unknown, staff: CurrentStaff) {
       const parentId = it.parentId ? real.get(it.parentId)! : null;
       const position = positions.get(parentId) ?? 0;
       positions.set(parentId, position + 1);
-      const row = { label: it.label, type: it.type, refId: it.type === "URL" || it.type === "SHOP" ? null : it.refId, url: it.type === "URL" ? it.url : null, openInNewTab: it.openInNewTab, highlight: it.highlight, parentId, position };
+      const row = { label: it.label, type: it.type, refId: GENERATED.includes(it.type) ? null : it.refId, url: it.type === "URL" ? it.url : null, openInNewTab: it.openInNewTab, highlight: it.highlight, icon: it.icon || null, image: it.image || null, badge: it.badge, autoChildren: it.autoChildren, isVisible: it.isVisible, parentId, position };
       if (existing.has(it.id)) {
         await tx.menuItem.update({ where: { id: it.id }, data: row });
         real.set(it.id, it.id);

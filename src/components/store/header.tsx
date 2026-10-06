@@ -1,26 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useLocale, useTranslations } from "next-intl";
-import { ChevronDown, ChevronRight, Globe, Grid2x2, Heart, Home, Menu, Search, ShoppingBag, User, LogOut, Package, Coins } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { ArrowLeft, ChevronDown, ChevronLeft, Grid2x2, Heart, Home, LayoutGrid, LogOut, Menu, Package, Search, ShoppingBag, Sparkles, Truck, User, Coins, X } from "lucide-react";
+import * as D from "@radix-ui/react-dialog";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { useStore } from "@/components/providers/store-context";
-import { Sheet } from "@/components/ui/overlay";
 import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "@/components/ui/menu";
 import { WishlistLink } from "./wishlist-button";
 import { SearchOverlay } from "./search-overlay";
-import { setDisplayCurrencyAction } from "@/actions/cart";
+import { CurrencyList, CurrencySelect, LanguageList, LanguageSelect } from "./locale-controls";
 import { customerLogoutAction } from "@/actions/auth";
 import { cn } from "@/lib/utils";
 import type { ResolvedMenuItem } from "@/server/cms/queries";
-import type { Tree } from "@/lib/category-tree";
-import type { CategoryNode } from "@/server/catalog/taxonomy";
 
 type Props = {
   storeName: string;
   logoUrl: string;
   menu: ResolvedMenuItem[];
-  categories: Tree<CategoryNode>[];
+  topLinks: ResolvedMenuItem[];
   freeShippingText: string | null;
   sticky: boolean;
   blur: boolean;
@@ -37,40 +35,20 @@ export function Logo({ name, url, className }: { name: string; url: string; clas
   );
 }
 
-function LanguageSwitch({ compact }: { compact?: boolean }) {
-  const locale = useLocale();
-  const pathname = usePathname();
-  const other = locale === "ar" ? "en" : "ar";
+function Thumb({ src, className }: { src: string | null; className?: string }) {
   return (
-    <Link href={pathname} locale={other} className={cn("flex items-center gap-1.5 rounded-full text-sm transition hover:text-fg", compact ? "px-2 py-1" : "")} hrefLang={other} lang={other}>
-      <Globe className="size-4" />
-      {other === "ar" ? "العربية" : "English"}
-    </Link>
+    <span className={cn("grid shrink-0 place-items-center overflow-hidden rounded-xl bg-surface", className)}>
+      {src ? <img src={src} alt="" loading="lazy" className="size-full object-cover" /> : <LayoutGrid className="size-1/2 text-muted" />}
+    </span>
   );
 }
 
-function CurrencySwitch() {
-  const { currencies, money } = useStore();
-  const router = useRouter();
-  const [, start] = useTransition();
-  if (currencies.length < 2) return null;
-  return (
-    <Dropdown>
-      <DropdownTrigger className="flex items-center gap-1 text-sm transition hover:text-fg">
-        {money.display.code}
-        <ChevronDown className="size-3.5" />
-      </DropdownTrigger>
-      <DropdownContent className="min-w-40">
-        {currencies.map((c) => (
-          <DropdownItem key={c.code} onSelect={() => start(async () => (await setDisplayCurrencyAction(c.code), router.refresh()))}>
-            <span className="w-8 font-semibold">{c.code}</span>
-            <span className="text-muted">{c.name}</span>
-          </DropdownItem>
-        ))}
-      </DropdownContent>
-    </Dropdown>
-  );
+function Badge({ text }: { text: string | null }) {
+  if (!text) return null;
+  return <span className="rounded-full bg-sale px-1.5 py-px text-[10px] font-bold uppercase leading-4 text-white">{text}</span>;
 }
+
+// ─────────────────────────────── Account & cart ─────────────────────────────
 
 function AccountMenu() {
   const t = useTranslations();
@@ -78,14 +56,16 @@ function AccountMenu() {
   const router = useRouter();
   if (!user)
     return (
-      <Link href="/account/login" className="grid size-10 place-items-center rounded-full transition hover:bg-surface" aria-label={t("common.signIn")}>
-        <User className="size-[22px]" strokeWidth={1.75} />
+      <Link href="/account/login" className="flex h-10 items-center gap-2 rounded-full px-2.5 text-sm font-medium transition hover:bg-surface" aria-label={t("common.signIn")}>
+        <User className="size-[21px]" strokeWidth={1.75} />
+        <span className="hidden xl:inline">{t("common.signIn")}</span>
       </Link>
     );
   return (
     <Dropdown>
-      <DropdownTrigger className="grid size-10 place-items-center rounded-full transition hover:bg-surface data-[state=open]:bg-surface" aria-label={t("common.account")}>
+      <DropdownTrigger className="flex h-10 items-center gap-2 rounded-full px-1.5 transition hover:bg-surface data-[state=open]:bg-surface xl:pe-3" aria-label={t("common.account")}>
         <span className="grid size-7 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-fg">{user.name.slice(0, 1).toUpperCase()}</span>
+        <span className="hidden max-w-24 truncate text-sm font-medium xl:inline">{user.name.split(" ")[0]}</span>
       </DropdownTrigger>
       <DropdownContent>
         <div className="px-3 py-2">
@@ -138,41 +118,159 @@ function CartButton({ className }: { className?: string }) {
   );
 }
 
-function MegaMenu({ item }: { item: ResolvedMenuItem }) {
-  const [open, setOpen] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const enter = () => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setOpen(true), 80);
-  };
-  const leave = () => {
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setOpen(false), 120);
-  };
-  if (!item.children.length)
+// ─────────────────────────────── Desktop mega menu ──────────────────────────
+
+/** Category panel: roots on the side (when several), active root's subcategories as visual columns. */
+function CategoryPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigate: () => void }) {
+  const t = useTranslations("header");
+  // "All categories" lists roots with their own children; a single category lists its children directly.
+  const multi = item.kind === "all-categories";
+  const [active, setActive] = useState(0);
+  const root = multi ? item.children[active] : item;
+  const columns = root?.children ?? [];
+  return (
+    <div className={cn("grid min-h-[22rem]", multi ? "grid-cols-[17rem_1fr]" : "grid-cols-1")}>
+      {multi && (
+        <ul className="border-e border-border bg-surface/60 p-2">
+          {item.children.map((c, i) => (
+            <li key={c.id}>
+              <Link
+                href={c.href}
+                onMouseEnter={() => setActive(i)}
+                onFocus={() => setActive(i)}
+                onClick={onNavigate}
+                className={cn("flex items-center gap-3 rounded-xl px-2.5 py-2 text-[14px] font-medium transition", i === active ? "bg-bg text-fg shadow-sm" : "text-fg/75 hover:text-fg")}
+              >
+                <Thumb src={c.image} className="size-9" />
+                <span className="flex-1">{c.label}</span>
+                {c.children.length > 0 && <ChevronLeft className="size-4 text-muted ltr:rotate-180" />}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <h3 className="text-lg font-semibold tracking-tight">{root?.label}</h3>
+          <Link href={root?.href ?? item.href} onClick={onNavigate} className="flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
+            {t("shopAll", { name: root?.label ?? "" })}
+            <ArrowLeft className="size-4 ltr:rotate-180" />
+          </Link>
+        </div>
+        {columns.length ? (
+          <div className="grid grid-cols-3 gap-x-6 gap-y-5 xl:grid-cols-4">
+            {columns.map((c) => (
+              <div key={c.id} className="min-w-0">
+                <Link href={c.href} onClick={onNavigate} className="group flex items-center gap-3">
+                  <Thumb src={c.image} className="size-12 transition group-hover:scale-[1.04]" />
+                  <span className="min-w-0 text-[14px] font-semibold leading-snug group-hover:text-accent">{c.label}</span>
+                </Link>
+                {c.children.length > 0 && (
+                  <ul className="mt-2 space-y-1 ps-[3.75rem]">
+                    {c.children.slice(0, 6).map((g) => (
+                      <li key={g.id}>
+                        <Link href={g.href} onClick={onNavigate} className="text-[13px] text-muted transition hover:text-fg">
+                          {g.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Link href={root?.href ?? item.href} onClick={onNavigate} className="block overflow-hidden rounded-2xl bg-surface">
+            <Thumb src={root?.image ?? null} className="aspect-[16/7] w-full rounded-none" />
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function BrandPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigate: () => void }) {
+  const t = useTranslations("common");
+  return (
+    <div className="p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <h3 className="text-lg font-semibold tracking-tight">{item.label}</h3>
+        <Link href={item.href} onClick={onNavigate} className="flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
+          {t("allBrands")}
+          <ArrowLeft className="size-4 ltr:rotate-180" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-6 gap-3">
+        {item.children.map((b) => (
+          <Link key={b.id} href={b.href} onClick={onNavigate} title={b.label} className="grid h-20 place-items-center rounded-2xl border border-border px-4 transition hover:-translate-y-0.5 hover:border-fg/20 hover:shadow-card">
+            {b.image ? <img src={b.image} alt={b.label} loading="lazy" className="max-h-8 w-full object-contain" /> : <span className="text-sm font-semibold">{b.label}</span>}
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NavItem({ item, open, onOpen, onClose }: { item: ResolvedMenuItem; open: boolean; onOpen: () => void; onClose: () => void }) {
+  const hasPanel = item.children.length > 0;
+  const base = cn("relative flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap px-2.5 text-[14.5px] xl:px-3 font-medium transition", item.highlight ? "text-sale hover:text-sale" : "text-fg/80 hover:text-fg", open && "text-fg");
+  if (!hasPanel)
     return (
-      <Link href={item.href} className={cn("relative flex h-11 items-center px-3 text-[14.5px] font-medium text-fg/80 transition hover:text-fg", item.highlight && "text-sale hover:text-sale")} target={item.newTab ? "_blank" : undefined}>
+      <Link href={item.href} className={base} target={item.newTab ? "_blank" : undefined}>
+        {item.highlight && <Sparkles className="size-4" />}
         {item.label}
+        <Badge text={item.badge} />
       </Link>
     );
   return (
-    <div className="relative" onMouseEnter={enter} onMouseLeave={leave} onFocus={enter} onBlur={leave}>
-      <Link href={item.href} className="flex h-11 items-center gap-1 px-3 text-[14.5px] font-medium text-fg/80 transition hover:text-fg" aria-expanded={open} aria-haspopup="true">
-        {item.label}
-        <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
-      </Link>
-      {open && (
-        <div className="pop absolute start-0 top-full z-50 pt-1" data-state="open">
-          <div className="grid min-w-64 gap-0.5 rounded-2xl border border-border bg-bg p-2 shadow-pop">
-            {item.children.map((c) => (
-              <Link key={c.id} href={c.href} onClick={() => setOpen(false)} className="flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition hover:bg-surface">
-                {c.label}
-                <ChevronRight className="flip-rtl size-4 text-muted" />
-              </Link>
-            ))}
-            <Link href={item.href} onClick={() => setOpen(false)} className="mt-1 rounded-xl px-3 py-2.5 text-sm font-medium text-accent hover:bg-surface">
-              {item.label} →
-            </Link>
+    <Link
+      href={item.href}
+      className={base}
+      aria-expanded={open}
+      aria-haspopup="true"
+      onMouseEnter={onOpen}
+      onFocus={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      {item.kind === "all-categories" && <Grid2x2 className="size-4" />}
+      {item.label}
+      <Badge text={item.badge} />
+      <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} />
+      <span className={cn("absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-fg transition", open ? "scale-x-100" : "scale-x-0")} />
+    </Link>
+  );
+}
+
+function DesktopNav({ menu }: { menu: ResolvedMenuItem[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const pathname = usePathname();
+  // Hover intent: small delays prevent flicker when the pointer crosses items.
+  const openSoon = (id: string) => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOpenId(id), openId ? 0 : 90);
+  };
+  const closeSoon = () => {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setOpenId(null), 160);
+  };
+  useEffect(() => setOpenId(null), [pathname]);
+  const active = menu.find((m) => m.id === openId);
+  return (
+    <div onMouseLeave={closeSoon} onMouseEnter={() => clearTimeout(timer.current)} className="relative">
+      <div className="container-store no-scrollbar flex items-center overflow-x-auto">
+        {menu.map((item) => (
+          <NavItem key={item.id} item={item} open={openId === item.id} onOpen={() => (item.children.length ? openSoon(item.id) : closeSoon())} onClose={() => setOpenId(null)} />
+        ))}
+      </div>
+      {active && active.children.length > 0 && (
+        <div className="absolute inset-x-0 top-full z-50 pt-px" onMouseEnter={() => clearTimeout(timer.current)}>
+          <div className="container-store">
+            <div className="pop overflow-hidden rounded-b-3xl border border-t-0 border-border bg-bg shadow-pop" data-state="open">
+              {active.kind === "brands" ? <BrandPanel item={active} onNavigate={() => setOpenId(null)} /> : <CategoryPanel key={active.id} item={active} onNavigate={() => setOpenId(null)} />}
+            </div>
           </div>
         </div>
       )}
@@ -180,38 +278,166 @@ function MegaMenu({ item }: { item: ResolvedMenuItem }) {
   );
 }
 
-function MobileCategoryTree({ nodes, onNavigate, depth = 0 }: { nodes: Tree<CategoryNode>[]; onNavigate: () => void; depth?: number }) {
-  const [open, setOpen] = useState<string | null>(null);
-  return (
-    <ul className={cn(depth > 0 && "ms-3 border-s border-border ps-2")}>
-      {nodes.map((n) => (
-        <li key={n.id}>
-          <div className="flex items-center">
-            <Link href={`/category/${n.fullSlug}`} onClick={onNavigate} className="flex-1 rounded-xl px-3 py-3 text-[15px] font-medium hover:bg-surface">
-              {n.name}
-            </Link>
-            {n.children.length > 0 && (
-              <button type="button" onClick={() => setOpen(open === n.id ? null : n.id)} className="grid size-11 place-items-center rounded-xl text-muted hover:bg-surface" aria-expanded={open === n.id} aria-label={n.name}>
-                <ChevronDown className={cn("size-4 transition-transform", open === n.id && "rotate-180")} />
-              </button>
-            )}
-          </div>
-          {open === n.id && <MobileCategoryTree nodes={n.children} onNavigate={onNavigate} depth={depth + 1} />}
-        </li>
-      ))}
-    </ul>
+// ─────────────────────────────── Mobile drawer ──────────────────────────────
+
+type Panel = { title: string; href: string; items: ResolvedMenuItem[] };
+
+/** Drawer row: drills into children when there are any, otherwise navigates. */
+function DrawerRow({ item, onDrill, onNavigate }: { item: ResolvedMenuItem; onDrill: (i: ResolvedMenuItem) => void; onNavigate: () => void }) {
+  return item.children.length ? (
+    <button type="button" onClick={() => onDrill(item)} className="flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start text-[15px] font-medium transition active:bg-surface">
+      {item.image !== null || item.kind !== "link" ? <Thumb src={item.image} className="size-10" /> : null}
+      <span className={cn("flex-1", item.highlight && "text-sale")}>{item.label}</span>
+      <Badge text={item.badge} />
+      <ChevronLeft className="size-5 text-muted ltr:rotate-180" />
+    </button>
+  ) : (
+    <Link href={item.href} onClick={onNavigate} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[15px] font-medium transition active:bg-surface">
+      {item.image ? <Thumb src={item.image} className="size-10" /> : null}
+      <span className={cn("flex-1", item.highlight && "text-sale")}>{item.label}</span>
+      <Badge text={item.badge} />
+    </Link>
   );
 }
 
-export function Header({ storeName, logoUrl, menu, categories, freeShippingText, sticky, blur, showCategoryBar }: Props) {
+/**
+ * Layered navigation: each level slides in over the previous one with a clear
+ * back button, so deep category trees stay easy to browse with one thumb.
+ */
+function MobileDrawer({ open, onOpenChange, storeName, menu, topLinks, startAtCategories }: { open: boolean; onOpenChange: (o: boolean) => void; storeName: string; menu: ResolvedMenuItem[]; topLinks: ResolvedMenuItem[]; startAtCategories: boolean }) {
   const t = useTranslations();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const { user } = useStore();
+  const [stack, setStack] = useState<Panel[]>([]);
+  const close = () => onOpenChange(false);
+  const allCategories = menu.find((m) => m.kind === "all-categories");
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
+    if (!open) return;
+    setStack(startAtCategories && allCategories ? [{ title: allCategories.label, href: allCategories.href, items: allCategories.children }] : []);
+  }, [open, startAtCategories, allCategories]);
+
+  const push = (i: ResolvedMenuItem) => setStack((s) => [...s, { title: i.label, href: i.href, items: i.children }]);
+  const pop = () => setStack((s) => s.slice(0, -1));
+  const panel = stack.at(-1);
+
+  return (
+    <D.Root open={open} onOpenChange={onOpenChange}>
+      <D.Portal>
+        <D.Overlay className="sheet-overlay fixed inset-0 z-[70] bg-black/40 backdrop-blur-[2px]" />
+        <D.Content aria-describedby={undefined} className="sheet fixed inset-y-0 start-0 z-[71] flex w-[min(24rem,92vw)] flex-col bg-bg shadow-pop outline-none" data-side="start">
+          <div className="flex h-16 items-center gap-2 border-b border-border px-3">
+            {panel ? (
+              <button type="button" onClick={pop} className="flex h-10 items-center gap-1.5 rounded-full px-2 text-sm font-medium hover:bg-surface" aria-label={t("common.back")}>
+                <ArrowLeft className="size-5 rtl:rotate-180" />
+                {t("common.back")}
+              </button>
+            ) : (
+              <D.Title className="px-1">
+                <Logo name={storeName} url="" className="text-xl" />
+              </D.Title>
+            )}
+            {panel && <D.Title className="sr-only">{panel.title}</D.Title>}
+            <D.Close className="ms-auto grid size-10 place-items-center rounded-full hover:bg-surface" aria-label={t("common.close")}>
+              <X className="size-5" />
+            </D.Close>
+          </div>
+
+          <div key={stack.length} className="panel-in min-h-0 flex-1 overflow-y-auto px-2 py-3">
+            {panel ? (
+              <>
+                <Link href={panel.href} onClick={close} className="mb-2 flex items-center justify-between rounded-2xl bg-surface px-4 py-3 text-[15px] font-semibold">
+                  {t("header.shopAll", { name: panel.title })}
+                  <ArrowLeft className="size-4 ltr:rotate-180" />
+                </Link>
+                <nav aria-label={panel.title}>
+                  {panel.items.map((i) => (
+                    <DrawerRow key={i.id} item={i} onDrill={push} onNavigate={close} />
+                  ))}
+                </nav>
+              </>
+            ) : (
+              <div className="space-y-5">
+                {user ? (
+                  <Link href="/account" onClick={close} className="mx-1 flex items-center gap-3 rounded-2xl bg-surface p-3">
+                    <span className="grid size-11 place-items-center rounded-full bg-primary font-semibold text-primary-fg">{user.name.slice(0, 1)}</span>
+                    <span>
+                      <span className="block text-sm font-semibold">{user.name}</span>
+                      <span className="block text-xs text-muted">{t("header.myAccount")}</span>
+                    </span>
+                  </Link>
+                ) : (
+                  <div className="mx-1 grid grid-cols-2 gap-2">
+                    <Link href="/account/login" onClick={close} className="rounded-full bg-primary py-3 text-center text-sm font-medium text-primary-fg">
+                      {t("common.signIn")}
+                    </Link>
+                    <Link href="/account/register" onClick={close} className="rounded-full border border-border py-3 text-center text-sm font-medium">
+                      {t("common.register")}
+                    </Link>
+                  </div>
+                )}
+                <nav aria-label={t("common.categories")}>
+                  <Link href="/" onClick={close} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[15px] font-medium active:bg-surface">
+                    <span className="grid size-10 place-items-center rounded-xl bg-surface">
+                      <Home className="size-5" />
+                    </span>
+                    {t("common.home")}
+                  </Link>
+                  {menu.map((i) => (
+                    <DrawerRow key={i.id} item={i} onDrill={push} onNavigate={close} />
+                  ))}
+                </nav>
+                {topLinks.length > 0 && (
+                  <nav className="border-t border-border pt-3" aria-label={t("header.help")}>
+                    {topLinks.map((i) => (
+                      <Link key={i.id} href={i.href} onClick={close} className="block rounded-xl px-3 py-2.5 text-[15px] text-fg/80 active:bg-surface">
+                        {i.label}
+                      </Link>
+                    ))}
+                  </nav>
+                )}
+                <div className="space-y-3 border-t border-border px-2 pt-4">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted">{t("common.language")}</p>
+                  <LanguageList />
+                  <p className="pt-2 text-xs font-semibold uppercase tracking-wider text-muted">{t("common.currency")}</p>
+                  <CurrencyList />
+                </div>
+              </div>
+            )}
+          </div>
+        </D.Content>
+      </D.Portal>
+    </D.Root>
+  );
+}
+
+// ─────────────────────────────────── Header ─────────────────────────────────
+
+/**
+ * Store header.
+ * Desktop: utility bar (shipping note, help links, currency, language) →
+ * main row (logo, prominent search, account, wishlist, cart) → navigation
+ * with mega menus. Mobile: compact bar + always-visible search pill.
+ * On scroll the navigation/search rows tuck away going down and return going
+ * up, keeping the essentials (logo, search, cart) one tap away.
+ */
+export function Header({ storeName, logoUrl, menu, topLinks, freeShippingText, sticky, blur, showCategoryBar }: Props) {
+  const t = useTranslations();
+  const [drawer, setDrawer] = useState<{ open: boolean; categories: boolean }>({ open: false, categories: false });
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [tucked, setTucked] = useState(false);
+  const lastY = useRef(0);
+
+  const onScroll = useCallback(() => {
+    const y = window.scrollY;
+    setScrolled(y > 8);
+    // Hysteresis avoids flicker on small scroll jitters.
+    if (y > 160 && y > lastY.current + 6) setTucked(true);
+    else if (y < lastY.current - 6 || y < 120) setTucked(false);
+    lastY.current = y;
+  }, []);
+
+  useEffect(() => {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     const onKey = (e: KeyboardEvent) => {
@@ -223,13 +449,16 @@ export function Header({ storeName, logoUrl, menu, categories, freeShippingText,
     };
     window.addEventListener("keydown", onKey);
     const openSearch = () => setSearchOpen(true);
+    const openCategories = () => setDrawer({ open: true, categories: true });
     window.addEventListener("nq:open-search", openSearch);
+    window.addEventListener("nq:open-categories", openCategories);
     return () => {
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("nq:open-search", openSearch);
+      window.removeEventListener("nq:open-categories", openCategories);
     };
-  }, []);
+  }, [onScroll]);
 
   return (
     <>
@@ -237,44 +466,44 @@ export function Header({ storeName, logoUrl, menu, categories, freeShippingText,
         {t("common.skipToContent")}
       </a>
       <div className="hidden border-b border-border bg-surface/70 text-[13px] text-muted md:block">
-        <div className="container-store flex h-9 items-center justify-between">
-          <p>{freeShippingText}</p>
-          <div className="flex items-center gap-5">
-            <Link href="/faq" className="transition hover:text-fg">
-              {t("header.help")}
-            </Link>
-            <Link href="/account/orders" className="transition hover:text-fg">
-              {t("header.trackOrder")}
-            </Link>
-            <CurrencySwitch />
-            <LanguageSwitch />
+        <div className="container-store flex h-9 items-center justify-between gap-6">
+          <p className="flex min-w-0 items-center gap-2 truncate">
+            {freeShippingText && <Truck className="size-4 shrink-0 text-accent" />}
+            {freeShippingText}
+          </p>
+          <div className="flex shrink-0 items-center gap-5">
+            {topLinks.map((l) => (
+              <Link key={l.id} href={l.href} className="transition hover:text-fg">
+                {l.label}
+              </Link>
+            ))}
+            <span className="h-4 w-px bg-border" aria-hidden />
+            <CurrencySelect />
+            <LanguageSelect />
           </div>
         </div>
       </div>
 
       <header className={cn("z-40 w-full border-b transition-[background,box-shadow,border-color] duration-300", sticky && "sticky top-0", scrolled ? "border-border shadow-[0_6px_24px_-18px_rgb(15_23_42/0.35)]" : "border-transparent", blur ? "bg-bg/85 backdrop-blur-xl backdrop-saturate-150" : "bg-bg")}>
         <div className="container-store flex h-16 items-center gap-2 md:h-[72px] md:gap-6">
-          <button type="button" onClick={() => setMenuOpen(true)} className="-ms-2 grid size-10 place-items-center rounded-full hover:bg-surface lg:hidden" aria-label={t("common.openMenu")}>
+          <button type="button" onClick={() => setDrawer({ open: true, categories: false })} className="-ms-2 grid size-10 place-items-center rounded-full hover:bg-surface lg:hidden" aria-label={t("common.openMenu")}>
             <Menu className="size-[22px]" strokeWidth={1.75} />
           </button>
-          <Link href="/" className="shrink-0" aria-label={storeName}>
+          <Link href="/" className="shrink-0 max-lg:me-auto" aria-label={storeName}>
             <Logo name={storeName} url={logoUrl} />
           </Link>
 
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="mx-auto hidden h-11 w-full max-w-xl items-center gap-3 rounded-full border border-border bg-surface/60 px-4 text-start text-sm text-muted transition hover:border-fg/20 hover:bg-surface md:flex"
+            className="mx-auto hidden h-12 w-full max-w-2xl items-center gap-3 rounded-full border border-border bg-surface/60 px-5 text-start text-sm text-muted transition hover:border-fg/20 hover:bg-surface md:flex"
           >
             <Search className="size-[18px]" />
-            <span className="flex-1">{t("common.searchPlaceholder")}</span>
+            <span className="flex-1 truncate">{t("common.searchPlaceholder")}</span>
             <kbd className="hidden rounded-md border border-border bg-bg px-1.5 py-0.5 font-sans text-[11px] lg:inline">⌘K</kbd>
           </button>
 
-          <div className="ms-auto flex items-center gap-0.5 md:ms-0">
-            <button type="button" onClick={() => setSearchOpen(true)} className="grid size-10 place-items-center rounded-full hover:bg-surface md:hidden" aria-label={t("common.search")}>
-              <Search className="size-[22px]" strokeWidth={1.75} />
-            </button>
+          <div className="flex items-center gap-0.5">
             <div className="max-md:hidden">
               <AccountMenu />
             </div>
@@ -283,66 +512,28 @@ export function Header({ storeName, logoUrl, menu, categories, freeShippingText,
           </div>
         </div>
 
-        {showCategoryBar && (
-          <nav className="hidden border-t border-border/70 lg:block" aria-label={t("common.categories")}>
-            <div className="container-store flex items-center gap-1">
-              <Link href="/shop" className="flex h-11 items-center gap-2 pe-3 text-[14.5px] font-semibold">
-                <Grid2x2 className="size-4" />
-                {t("common.shop")}
-              </Link>
-              {menu.map((item) => (
-                <MegaMenu key={item.id} item={item} />
-              ))}
+        {/* Mobile: search is the primary action, always one tap away. */}
+        <div className={cn("grid transition-[grid-template-rows,opacity] duration-300 md:hidden", tucked ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100")}>
+          <div className="overflow-hidden">
+            <div className="container-store pb-3">
+              <button type="button" onClick={() => setSearchOpen(true)} className="flex h-11 w-full items-center gap-3 rounded-full border border-border bg-surface px-4 text-start text-sm text-muted">
+                <Search className="size-[18px]" />
+                <span className="truncate">{t("common.searchPlaceholder")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {showCategoryBar && menu.length > 0 && (
+          <nav className={cn("hidden border-t border-border/70 transition-[grid-template-rows,opacity] duration-300 lg:grid", tucked ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr] opacity-100")} aria-label={t("common.categories")}>
+            <div className={cn(tucked ? "overflow-hidden" : "overflow-visible")}>
+              <DesktopNav menu={menu} />
             </div>
           </nav>
         )}
       </header>
 
-      <Sheet open={menuOpen} onOpenChange={setMenuOpen} side="start" title={storeName} closeLabel={t("common.close")}>
-        <div className="flex flex-col gap-6 p-4">
-          {!user ? (
-            <div className="grid grid-cols-2 gap-2">
-              <Link href="/account/login" onClick={() => setMenuOpen(false)} className="rounded-full bg-primary py-3 text-center text-sm font-medium text-primary-fg">
-                {t("common.signIn")}
-              </Link>
-              <Link href="/account/register" onClick={() => setMenuOpen(false)} className="rounded-full border border-border py-3 text-center text-sm font-medium">
-                {t("common.register")}
-              </Link>
-            </div>
-          ) : (
-            <Link href="/account" onClick={() => setMenuOpen(false)} className="flex items-center gap-3 rounded-2xl bg-surface p-3">
-              <span className="grid size-10 place-items-center rounded-full bg-primary font-semibold text-primary-fg">{user.name.slice(0, 1)}</span>
-              <span>
-                <span className="block text-sm font-semibold">{user.name}</span>
-                <span className="block text-xs text-muted">{t("header.myAccount")}</span>
-              </span>
-            </Link>
-          )}
-          <div>
-            <h3 className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("common.categories")}</h3>
-            <MobileCategoryTree nodes={categories} onNavigate={() => setMenuOpen(false)} />
-          </div>
-          <div className="grid gap-1 border-t border-border pt-4">
-            <Link href="/shop?sale=1" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-[15px] font-medium text-sale hover:bg-surface">
-              {t("common.deals")}
-            </Link>
-            <Link href="/brands" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-[15px] font-medium hover:bg-surface">
-              {t("common.brands")}
-            </Link>
-            <Link href="/faq" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-[15px] font-medium hover:bg-surface">
-              {t("header.help")}
-            </Link>
-            <Link href="/contact" onClick={() => setMenuOpen(false)} className="rounded-xl px-3 py-3 text-[15px] font-medium hover:bg-surface">
-              {t("contact.title")}
-            </Link>
-          </div>
-          <div className="flex items-center justify-between border-t border-border px-3 pt-4 text-sm text-muted">
-            <LanguageSwitch />
-            <CurrencySwitch />
-          </div>
-        </div>
-      </Sheet>
-
+      <MobileDrawer open={drawer.open} onOpenChange={(o) => setDrawer((d) => ({ ...d, open: o }))} storeName={storeName} menu={menu} topLinks={topLinks} startAtCategories={drawer.categories} />
       <SearchOverlay open={searchOpen} onOpenChange={setSearchOpen} />
     </>
   );
@@ -352,8 +543,8 @@ export function Header({ storeName, logoUrl, menu, categories, freeShippingText,
 export function MobileTabBar() {
   const t = useTranslations();
   const pathname = usePathname();
-  const { cartCount, setCartOpen, wishlist } = useStore();
-  const item = "flex flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium";
+  const { cartCount, setCartOpen, wishlist, user } = useStore();
+  const item = "relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition active:scale-95";
   const active = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden" aria-label="Primary">
@@ -362,24 +553,24 @@ export function MobileTabBar() {
           <Home className="size-[22px]" strokeWidth={active("/") ? 2.2 : 1.75} />
           {t("common.home")}
         </Link>
-        <Link href="/shop" className={cn(item, active("/shop") || active("/category") ? "text-fg" : "text-muted")}>
+        <button type="button" onClick={() => window.dispatchEvent(new Event("nq:open-categories"))} className={cn(item, active("/shop") || active("/category") ? "text-fg" : "text-muted")}>
           <Grid2x2 className="size-[22px]" strokeWidth={1.75} />
-          {t("common.shop")}
-        </Link>
-        <button type="button" onClick={() => window.dispatchEvent(new Event("nq:open-search"))} className={cn(item, "text-muted")}>
-          <Search className="size-[22px]" strokeWidth={1.75} />
-          {t("common.search")}
+          {t("common.categories")}
         </button>
-        <Link href="/wishlist" className={cn(item, "relative", active("/wishlist") ? "text-fg" : "text-muted")}>
-          <Heart className="size-[22px]" strokeWidth={1.75} />
-          {wishlist.size > 0 && <span className="absolute top-2 ms-5 size-2 rounded-full bg-sale" />}
-          {t("common.wishlist")}
-        </Link>
-        <button type="button" onClick={() => setCartOpen(true)} className={cn(item, "relative text-muted")}>
+        <button type="button" onClick={() => setCartOpen(true)} className={cn(item, "text-muted")}>
           <ShoppingBag className="size-[22px]" strokeWidth={1.75} />
           {cartCount > 0 && <span className="absolute top-1.5 ms-6 grid min-w-4 place-items-center rounded-full bg-accent px-1 text-[10px] font-bold leading-4 text-accent-fg">{cartCount}</span>}
           {t("common.cart")}
         </button>
+        <Link href="/wishlist" className={cn(item, active("/wishlist") ? "text-fg" : "text-muted")}>
+          <Heart className="size-[22px]" strokeWidth={1.75} />
+          {wishlist.size > 0 && <span className="absolute top-1.5 ms-6 grid min-w-4 place-items-center rounded-full bg-sale px-1 text-[10px] font-bold leading-4 text-white">{wishlist.size}</span>}
+          {t("common.wishlist")}
+        </Link>
+        <Link href={user ? "/account" : "/account/login"} className={cn(item, active("/account") ? "text-fg" : "text-muted")}>
+          <User className="size-[22px]" strokeWidth={1.75} />
+          {t("common.account")}
+        </Link>
       </div>
     </nav>
   );

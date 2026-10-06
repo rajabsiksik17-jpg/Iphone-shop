@@ -486,3 +486,15 @@ body[data-listing-loading] [data-listing-grid] {
       inset 0 0 0 var(--PhoneInputCountryFlag-borderWidth) var(--color-accent);
   }
 }
+
+/* Mobile drawer: each navigation level slides in from the reading direction's end. */
+@keyframes panel-in {
+  from { opacity: 0; transform: translateX(14%); }
+  to { opacity: 1; transform: none; }
+}
+.panel-in { animation: panel-in 0.28s var(--ease-out-expo) both; }
+[dir="rtl"] .panel-in { animation-name: panel-in-rtl; }
+@keyframes panel-in-rtl {
+  from { opacity: 0; transform: translateX(-14%); }
+  to { opacity: 1; transform: none; }
+}

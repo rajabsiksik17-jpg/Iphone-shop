@@ -21,7 +21,7 @@ export const storeSchema = z.object({
   address: lt(400),
   legalName: z.string().default(""),
   taxNumber: z.string().default(""),
-  defaultCountry: z.string().length(2).default("JO"),
+  defaultCountry: z.string().length(2).default("SA"),
   orderNumberPrefix: z.string().max(6).default("NQ"),
   lowStockThreshold: z.coerce.number().int().min(0).max(10_000).default(5),
   newProductDays: z.coerce.number().int().min(0).max(365).default(30),
@@ -71,12 +71,12 @@ export const appearanceSchema = z.object({
     .object({
       style: z.enum(["dark", "light"]).default("dark"),
       about: lt(600).prefault({
-        en: "Genuine devices, honest prices and support from people who know tech. Delivered across Jordan.",
-        ar: "أجهزة أصلية، أسعار عادلة، ودعم من أشخاص يفهمون التقنية. توصيل لجميع أنحاء الأردن.",
+        en: "Genuine devices, honest prices and support from people who know tech. Delivered across Saudi Arabia.",
+        ar: "أجهزة أصلية، أسعار عادلة، ودعم من أشخاص يفهمون التقنية. توصيل لجميع أنحاء المملكة.",
       }),
       showNewsletter: z.boolean().default(true),
       showPaymentIcons: z.boolean().default(true),
-      paymentIcons: z.array(z.string()).default(["visa", "mastercard", "applepay", "cod"]),
+      paymentIcons: z.array(z.string()).default(["mada", "visa", "mastercard", "applepay", "cod"]),
     })
     .prefault({}),
   badges: z
@@ -98,17 +98,17 @@ export const appearanceSchema = z.object({
 
 export const localizationSchema = z.object({
   defaultLocale: z.enum(["ar", "en"]).default("ar"),
-  displayCurrencies: z.array(z.string().length(3)).default(["JOD", "USD", "EUR"]),
-  timezone: z.string().default("Asia/Amman"),
+  displayCurrencies: z.array(z.string().length(3)).default([]),
+  timezone: z.string().default("Asia/Riyadh"),
   useArabicDigits: z.boolean().default(false),
 });
 
 export const seoSchema = z.object({
   titleTemplate: lt(120).prefault({ en: "%s · Nuqta", ar: "%s · نقطة" }),
-  defaultTitle: lt(120).prefault({ en: "Nuqta — Phones, laptops & accessories in Jordan", ar: "نقطة — هواتف ولابتوبات وإكسسوارات في الأردن" }),
+  defaultTitle: lt(120).prefault({ en: "Nuqta — Phones, laptops & accessories in Saudi Arabia", ar: "نقطة — هواتف ولابتوبات وإكسسوارات في السعودية" }),
   defaultDescription: lt(320).prefault({
-    en: "Shop genuine smartphones, tablets, laptops, wearables and accessories with fast delivery across Jordan and honest prices.",
-    ar: "تسوّق هواتف ذكية وأجهزة لوحية ولابتوبات وساعات وإكسسوارات أصلية مع توصيل سريع في الأردن وأسعار عادلة.",
+    en: "Shop genuine smartphones, tablets, laptops, wearables and accessories with fast delivery across Saudi Arabia and honest prices.",
+    ar: "تسوّق هواتف ذكية وأجهزة لوحية ولابتوبات وساعات وإكسسوارات أصلية مع توصيل سريع في المملكة وأسعار عادلة.",
   }),
   ogImageUrl: z.string().default(""),
   twitterHandle: z.string().default(""),
@@ -132,17 +132,18 @@ export const checkoutSchema = z.object({
 });
 
 export const taxSchema = z.object({
-  enabled: z.boolean().default(false),
-  rateBp: z.coerce.number().int().min(0).max(10_000).default(1600),
+  // Saudi Arabia: 15% VAT, conventionally included in displayed prices.
+  enabled: z.boolean().default(true),
+  rateBp: z.coerce.number().int().min(0).max(10_000).default(1500),
   pricesIncludeTax: z.boolean().default(true),
-  label: lt(60).prefault({ en: "Sales tax", ar: "ضريبة المبيعات" }),
+  label: lt(60).prefault({ en: "VAT", ar: "ضريبة القيمة المضافة" }),
 });
 
 export const loyaltySchema = z.object({
   enabled: z.boolean().default(true),
   // Points earned per 1 major unit of base currency spent.
   pointsPerUnit: z.coerce.number().min(0).max(1000).default(1),
-  // Minor units of discount one point is worth (JOD: 10 = 0.010 JOD).
+  // Minor units of discount one point is worth (SAR: 1 = 0.01 SAR).
   pointValue: z.coerce.number().int().min(0).default(10),
   minRedeemPoints: z.coerce.number().int().min(0).default(100),
   maxRedeemPercent: z.coerce.number().int().min(0).max(100).default(30),
@@ -383,9 +384,21 @@ export const privacySchema = z.object({
 });
 
 export const geoSchema = z.object({
-  defaultCountry: z.string().length(2).default("JO"),
+  defaultCountry: z.string().length(2).default("SA"),
   // Detect from CDN/proxy headers (Cloudflare, Vercel, Fastly…). No third-party calls.
   detectFromHeaders: z.boolean().default(true),
+});
+
+/** Exchange-rate refresh: configuration plus the last run's outcome (written by the job). */
+export const fxSchema = z.object({
+  autoUpdate: z.boolean().default(true),
+  intervalHours: z.coerce.number().int().min(1).max(168).default(12),
+  // Shoppers see prices in their country's currency on first visit (they can always switch).
+  currencyByCountry: z.boolean().default(true),
+  provider: z.string().default("open.er-api.com"),
+  lastAttemptAt: z.string().nullable().default(null),
+  lastSuccessAt: z.string().nullable().default(null),
+  lastError: z.string().nullable().default(null),
 });
 
 export const settingsSchemas = {
@@ -406,6 +419,7 @@ export const settingsSchemas = {
   maintenance: maintenanceSchema,
   privacy: privacySchema,
   geo: geoSchema,
+  fx: fxSchema,
 } as const;
 
 export type SettingsGroup = keyof typeof settingsSchemas;
@@ -435,4 +449,5 @@ export const SETTINGS_PERMISSIONS: Record<SettingsGroup, import("@/config/permis
   maintenance: "settings.general",
   privacy: "settings.general",
   geo: "settings.general",
+  fx: "settings.general",
 };

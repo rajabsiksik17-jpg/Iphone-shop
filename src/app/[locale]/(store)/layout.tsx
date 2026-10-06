@@ -59,7 +59,7 @@ export default async function StoreLayout({ children, params }: { children: Reac
         storeName={config.storeName}
         logoUrl={settings.store.logoUrl}
         menu={shell.menus.header}
-        categories={shell.categories}
+        topLinks={shell.menus.topbar}
         freeShippingText={freeShippingText}
         sticky={settings.appearance.header.sticky}
         blur={settings.appearance.header.style === "blur"}

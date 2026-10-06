@@ -32,11 +32,12 @@ function toFormat(row: Row, locale: string): CurrencyFormat {
   };
 }
 
+// Used only if the currency table is empty (fresh install before seeding).
 const FALLBACK: Row = {
-  code: "JOD",
-  name: { en: "Jordanian Dinar", ar: "دينار أردني" },
-  symbol: { en: "JOD", ar: "د.أ" },
-  decimals: 3,
+  code: "SAR",
+  name: { en: "Saudi Riyal", ar: "ريال سعودي" },
+  symbol: { en: "SAR", ar: "ر.س" },
+  decimals: 2,
   symbolPosition: "AFTER",
   thousandsSep: ",",
   decimalSep: ".",
@@ -44,6 +45,9 @@ const FALLBACK: Row = {
   isBase: true,
   isActive: true,
   position: 0,
+  autoRate: false,
+  rateUpdatedAt: null,
+  flag: "SA",
 };
 
 export async function baseCurrency() {

@@ -450,6 +450,10 @@ model Product {
   // Lower-cased names (all locales), SKU, brand, categories and attribute
   // values — indexed with pg_trgm for fast fuzzy search.
   searchText String @default("")
+  // Normalized name / brand and phonetic keys for ranking (see lib/search-text).
+  searchTitle    String @default("")
+  searchBrand    String @default("")
+  searchPhonetic String @default("")
   seo        Json   @default("{}")
 
   createdAt DateTime @default(now())
@@ -1284,6 +1288,9 @@ enum MenuItemType {
   BRAND
   PRODUCT
   SHOP
+  // Automatic mega-menu entries.
+  ALL_CATEGORIES
+  ALL_BRANDS
 }
 
 model MenuItem {
@@ -1300,6 +1307,13 @@ model MenuItem {
   position     Int          @default(0)
   openInNewTab Boolean      @default(false)
   highlight    Boolean      @default(false)
+  // "lucide:Name" / "custom:<id>" and an optional image (mega menu cards).
+  icon         String?
+  image        String?
+  badge        Json         @default("{}")
+  // Category items: fill the dropdown from the category tree automatically.
+  autoChildren Boolean      @default(true)
+  isVisible    Boolean      @default(true)
 
   @@index([menuId, parentId, position])
 }
@@ -1408,6 +1422,11 @@ model Currency {
   decimalSep     String         @default(".")
   // Units of this currency per 1 unit of the base currency.
   rate           Float          @default(1)
+  // Refreshed from the rates provider when true; an admin-pinned rate otherwise.
+  autoRate       Boolean        @default(true)
+  rateUpdatedAt  DateTime?
+  // Country whose flag represents the currency in the selector ("EU" for EUR).
+  flag           String?        @db.Char(2)
   isBase         Boolean        @default(false)
   isActive       Boolean        @default(true)
   position       Int            @default(0)

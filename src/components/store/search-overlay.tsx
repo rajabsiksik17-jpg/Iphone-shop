@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import * as D from "@radix-ui/react-dialog";
 import { useLocale, useTranslations } from "next-intl";
-import { ArrowUpRight, Clock, Search, TrendingUp, X, CornerDownLeft } from "lucide-react";
+import { ArrowUpRight, Clock, Search, TrendingUp, X, CornerDownLeft, Sparkles } from "lucide-react";
 import { Link, useRouter } from "@/i18n/navigation";
 import { suggestAction, logSearchAction } from "@/actions/store";
 import { Picture } from "@/components/ui/picture";
@@ -12,9 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { recentSearches } from "@/lib/local-store";
 import { track } from "@/lib/analytics-client";
 import { cn } from "@/lib/utils";
-import type { ProductCardDTO } from "@/types/catalog";
-
-type Suggestions = { products: ProductCardDTO[]; categories: { href: string; label: string }[]; brands: { href: string; label: string }[]; popular: string[] };
+import type { SearchSuggestions as Suggestions } from "@/server/catalog/taxonomy";
 
 /**
  * Instant search: debounced server suggestions (fuzzy, typo tolerant),
@@ -31,6 +29,8 @@ export function SearchOverlay({ open, onOpenChange }: { open: boolean; onOpenCha
   const [active, setActive] = useState(-1);
   const [pending, start] = useTransition();
   const reqId = useRef(0);
+  // Per-query cache: backspacing or retyping never refetches.
+  const cache = useRef(new Map<string, Suggestions>());
 
   useEffect(() => {
     if (open) setRecent(recentSearches.get());
@@ -39,15 +39,23 @@ export function SearchOverlay({ open, onOpenChange }: { open: boolean; onOpenCha
   useEffect(() => {
     if (!open) return;
     const id = ++reqId.current;
+    const key = q.trim().toLowerCase();
+    const cached = cache.current.get(key);
+    if (cached) {
+      setData(cached);
+      setActive(-1);
+      return;
+    }
     const handle = setTimeout(() => {
       start(async () => {
         const res = await suggestAction(q, locale);
+        if (res.ok) cache.current.set(key, res.data);
         if (res.ok && id === reqId.current) {
           setData(res.data);
           setActive(-1);
         }
       });
-    }, q ? 160 : 0);
+    }, q ? 220 : 0);
     return () => clearTimeout(handle);
   }, [q, open, locale]);
 
@@ -119,39 +127,70 @@ export function SearchOverlay({ open, onOpenChange }: { open: boolean; onOpenCha
 
           <div id="search-results" role="listbox" className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
             {!q.trim() && (
-              <div className="grid gap-6 sm:grid-cols-2">
-                {recent.length > 0 && (
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{t("search.recent")}</h3>
-                      <button type="button" onClick={() => (recentSearches.clear(), setRecent([]))} className="text-xs text-muted hover:text-fg">
-                        {t("search.clearRecent")}
-                      </button>
-                    </div>
-                    <ul>
-                      {recent.map((r) => (
-                        <li key={r}>
-                          <button type="button" onClick={() => submit(r)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-sm hover:bg-surface">
-                            <Clock className="size-4 text-muted" />
-                            {r}
+              <div className="animate-fade-in space-y-7">
+                {(recent.length > 0 || (data?.popular.length ?? 0) > 0) && (
+                  <div className="grid gap-6 sm:grid-cols-2">
+                    {recent.length > 0 && (
+                      <div>
+                        <div className="mb-2 flex items-center justify-between">
+                          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">{t("search.recent")}</h3>
+                          <button type="button" onClick={() => (recentSearches.clear(), setRecent([]))} className="text-xs text-muted hover:text-fg">
+                            {t("search.clearRecent")}
                           </button>
-                        </li>
-                      ))}
-                    </ul>
+                        </div>
+                        <ul>
+                          {recent.map((r) => (
+                            <li key={r}>
+                              <button type="button" onClick={() => submit(r)} className="flex w-full items-center gap-3 rounded-xl px-2 py-2 text-sm hover:bg-surface">
+                                <Clock className="size-4 text-muted" />
+                                {r}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {data?.popular.length ? (
+                      <div>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{t("search.popular")}</h3>
+                        <div className="flex flex-wrap gap-2">
+                          {data.popular.map((p) => (
+                            <button key={p} type="button" onClick={() => submit(p)} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm transition hover:border-fg/30 hover:bg-surface">
+                              <TrendingUp className="size-3.5 text-accent" />
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 )}
-                {data?.popular.length ? (
-                  <div>
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{t("search.popular")}</h3>
-                    <div className="flex flex-wrap gap-2">
-                      {data.popular.map((p) => (
-                        <button key={p} type="button" onClick={() => submit(p)} className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm transition hover:border-fg/30 hover:bg-surface">
-                          <TrendingUp className="size-3.5 text-accent" />
-                          {p}
-                        </button>
+                {data?.categories.length ? (
+                  <section>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("search.categories")}</h3>
+                    <div className="no-scrollbar -mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:grid sm:grid-cols-6 sm:overflow-visible">
+                      {data.categories.map((c) => (
+                        <Link key={c.href} href={c.href} onClick={() => onOpenChange(false)} className="group flex w-[4.5rem] shrink-0 flex-col items-center gap-2 text-center sm:w-auto">
+                          <span className="grid size-16 place-items-center overflow-hidden rounded-full bg-surface ring-1 ring-border transition group-hover:ring-accent">
+                            {c.image && <Picture image={c.image} sizes="64px" className="size-full object-cover transition duration-500 group-hover:scale-105" />}
+                          </span>
+                          <span className="line-clamp-2 text-xs font-medium leading-tight">{c.label}</span>
+                        </Link>
                       ))}
                     </div>
-                  </div>
+                  </section>
+                ) : null}
+                {data?.brands.length ? (
+                  <section>
+                    <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">{t("search.brands")}</h3>
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+                      {data.brands.map((b) => (
+                        <Link key={b.href} href={b.href} onClick={() => onOpenChange(false)} title={b.label} className="grid h-14 place-items-center rounded-2xl border border-border px-2 transition hover:border-fg/25 hover:shadow-card">
+                          {b.image ? <Picture image={b.image} sizes="96px" className="h-6 w-full object-contain" /> : <span className="truncate text-xs font-semibold">{b.label}</span>}
+                        </Link>
+                      ))}
+                    </div>
+                  </section>
                 ) : null}
               </div>
             )}
@@ -163,8 +202,16 @@ export function SearchOverlay({ open, onOpenChange }: { open: boolean; onOpenCha
               </div>
             )}
 
+            {q.trim() && data?.didYouMean && (
+              <button type="button" onClick={() => setQ(data.didYouMean!)} className="animate-fade-in mb-4 flex items-center gap-2 rounded-xl bg-accent/8 px-3 py-2 text-sm">
+                <Sparkles className="size-4 text-accent" />
+                <span className="text-muted">{t("search.didYouMean")}</span>
+                <span className="font-semibold text-accent">{data.didYouMean}</span>
+              </button>
+            )}
+
             {q.trim() && data && (data.products.length > 0 || data.categories.length > 0 || data.brands.length > 0) && (
-              <div className="space-y-6">
+              <div className="animate-fade-in space-y-6">
                 {data.products.length > 0 && (
                   <section>
                     <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">{t("search.products")}</h3>

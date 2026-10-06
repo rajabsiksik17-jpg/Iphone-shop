@@ -19,7 +19,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:app": "tsx watch --clear-screen=false --ignore ./src --ignore ./.next server.ts"
+    "dev:app": "tsx watch --clear-screen=false --ignore ./src --ignore ./.next server.ts",
+    "migrate:saudi": "node --conditions=react-server --import tsx scripts/migrate-to-saudi.ts",
+    "search:reindex": "node --conditions=react-server --import tsx scripts/reindex-search.ts",
+    "upgrade:content": "node --conditions=react-server --import tsx scripts/upgrade-content.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -50,6 +53,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "country-flag-icons": "^1.6.20",
     "cross-env": "^10.1.0",
     "dotenv": "^18.0.5",
     "embla-carousel-autoplay": "^8.6.0",

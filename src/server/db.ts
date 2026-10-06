@@ -16,6 +16,24 @@ function create() {
   return new PrismaClient({ adapter });
 }
 
+/**
+ * Development only: hot reloads re-evaluate the generated client, so every
+ * edit can add a client (and a connection pool) that nothing uses any more;
+ * after a few hours that exhausts the heap. Keep the first two (the
+ * long-lived custom-server and Next graphs) and the newest four, and close
+ * the rest after a grace period so any in-flight query can finish.
+ */
+const KEEP_FIRST = 2;
+const KEEP_LATEST = 4;
+function retireStaleClients(clients: Map<unknown, PrismaClient>) {
+  const entries = [...clients.entries()];
+  if (entries.length <= KEEP_FIRST + KEEP_LATEST) return;
+  for (const [key, c] of entries.slice(KEEP_FIRST, entries.length - KEEP_LATEST)) {
+    clients.delete(key);
+    setTimeout(() => void c.$disconnect().catch(() => null), 120_000).unref?.();
+  }
+}
+
 function client() {
   const clients = (globalForPrisma.__prismaClients ??= new Map());
   let c = clients.get(PrismaClient);
@@ -25,6 +43,7 @@ function client() {
     if (process.env.NODE_ENV !== "production" && clients.size > 1) {
       // Each module graph legitimately has one; a growing count means a leak.
       console.warn(`[db] Prisma clients in this process: ${clients.size}`);
+      retireStaleClients(clients);
     }
   }
   return c;

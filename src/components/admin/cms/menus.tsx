@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { ArrowLeftToLine, ArrowRightToLine, ExternalLink, Menu as MenuIcon, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, ExternalLink, Eye, EyeOff, Menu as MenuIcon, Pencil, Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { useAdmin } from "../admin-context";
 import { PageHeader, Panel, Pill, Switch } from "../ui";
-import { Label, TextInput, Select, LocalizedField, FieldError } from "../fields";
+import { Label, TextInput, Select, LocalizedField, FieldError, ImageField } from "../fields";
+import { IconPicker, IconPreview } from "../icon-picker";
 import { EditSheet } from "../entity";
 import { SortableList } from "../sortable";
 import { ProductPicker, type PickedProduct } from "../product-picker";
@@ -19,7 +20,9 @@ import type { menuList } from "@/server/admin/content";
 type Data = Awaited<ReturnType<typeof menuList>>;
 type RawItem = Data["menus"][number]["items"][number];
 type Item = Omit<RawItem, "parentId"> & { depth: number };
-const TYPES = ["URL", "PAGE", "CATEGORY", "BRAND", "PRODUCT", "SHOP"] as const;
+const TYPES = ["CATEGORY", "ALL_CATEGORIES", "ALL_BRANDS", "PAGE", "BRAND", "PRODUCT", "SHOP", "URL"] as const;
+/** Types whose dropdown is generated from the catalogue. */
+const AUTO = new Set<string>(["ALL_CATEGORIES", "ALL_BRANDS"]);
 const MAX_DEPTH = 2;
 let seq = 0;
 const tmpId = () => `tmp-${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -90,7 +93,9 @@ export function MenusView({ data }: { data: Data }) {
       case "PRODUCT":
         return products.find((p) => p.id === it.refId)?.name;
       case "SHOP":
-        return locale === "ar" ? "المتجر" : "Shop";
+      case "ALL_CATEGORIES":
+      case "ALL_BRANDS":
+        return t(`cms.type.${it.type}` as "cms.type.URL");
       default:
         return it.url;
     }
@@ -143,7 +148,7 @@ export function MenusView({ data }: { data: Data }) {
             title={name}
             description={<code className="text-xs">{menu.key}</code>}
             actions={
-              <Button size="sm" variant="outline" leftIcon={<Plus />} onClick={() => setEditing({ id: tmpId(), label: {}, type: "CATEGORY", refId: null, url: "", openInNewTab: false, highlight: false, depth: 0 })}>
+              <Button size="sm" variant="outline" leftIcon={<Plus />} onClick={() => setEditing({ id: tmpId(), label: {}, type: "CATEGORY", refId: null, url: "", openInNewTab: false, highlight: false, icon: null, image: null, badge: {}, autoChildren: true, isVisible: true, depth: 0 })}>
                 {t("cms.addMenuItem")}
               </Button>
             }
@@ -155,14 +160,20 @@ export function MenusView({ data }: { data: Data }) {
                 onChange={change}
                 className="space-y-1 p-2"
                 render={(it, handle, i) => (
-                  <div className={cn("flex items-center gap-1.5 rounded-xl border bg-ad-panel px-2 py-1.5", errorIndex(i) ? "border-red-400" : "border-ad-border")} style={{ marginInlineStart: `${it.depth * 28}px` }}>
+                  <div className={cn("flex items-center gap-1.5 rounded-xl border bg-ad-panel px-2 py-1.5", errorIndex(i) ? "border-red-400" : "border-ad-border", !it.isVisible && "opacity-55")} style={{ marginInlineStart: `${it.depth * 28}px` }}>
                     {handle}
                     <button type="button" onClick={() => setEditing(it)} className="flex min-w-0 flex-1 items-center gap-2 py-1 text-start">
+                      {it.image ? <img src={it.image} alt="" className="size-6 shrink-0 rounded-md object-cover" /> : it.icon ? <IconPreview value={it.icon} className="size-4 shrink-0" /> : null}
                       <span className="truncate text-sm font-medium">{resolveLabel(it) || "—"}</span>
                       <Pill>{t(`cms.type.${it.type}` as "cms.type.URL")}</Pill>
+                      {tr(it.badge, locale) && <span className="rounded-full bg-red-500 px-1.5 text-[10px] font-bold uppercase leading-4 text-white">{tr(it.badge, locale)}</span>}
+                      {(AUTO.has(it.type) || (it.type === "CATEGORY" && it.autoChildren)) && <Wand2 className="size-3.5 text-ad-accent" aria-label={t("cms.autoChildren")} />}
                       {it.highlight && <Sparkles className="size-3.5 text-amber-500" aria-label={t("cms.highlight")} />}
                       {it.openInNewTab && <ExternalLink className="size-3.5 text-ad-muted" aria-label={t("cms.newTab")} />}
                     </button>
+                    <Button size="icon-sm" variant="ghost" aria-label={t(it.isVisible ? "cms.hide" : "cms.show")} title={t(it.isVisible ? "cms.hide" : "cms.show")} onClick={() => change(items.map((x) => (x.id === it.id ? { ...x, isVisible: !x.isVisible } : x)))}>
+                      {it.isVisible ? <Eye /> : <EyeOff />}
+                    </Button>
                     <Button size="icon-sm" variant="ghost" aria-label={t("cms.outdent")} disabled={it.depth === 0} onClick={() => change(items.map((x) => (x.id === it.id ? { ...x, depth: x.depth - 1 } : x)))}>
                       <ArrowLeftToLine className="rtl:rotate-180" />
                     </Button>
@@ -245,6 +256,25 @@ export function MenusView({ data }: { data: Data }) {
                 </Select>
               </div>
             )}
+            {AUTO.has(editing.type) && (
+              <p className="rounded-lg bg-ad-sunken p-3 text-xs leading-relaxed text-ad-muted">
+                {editing.type === "ALL_CATEGORIES"
+                  ? locale === "ar"
+                    ? "قائمة منسدلة كبيرة تُبنى تلقائياً من شجرة التصنيفات (حتى ثلاثة مستويات مع الصور). أي تصنيف تضيفه لاحقاً يظهر هنا دون تعديل القائمة."
+                    : "A mega menu built automatically from the category tree (up to three levels, with images). New categories appear here without editing the menu."
+                  : locale === "ar"
+                    ? "شبكة شعارات تُبنى تلقائياً من العلامات التجارية النشطة."
+                    : "A logo grid built automatically from your active brands."}
+              </p>
+            )}
+            {editing.type === "CATEGORY" && (
+              <Switch
+                checked={editing.autoChildren}
+                onCheckedChange={(v) => setEditing({ ...editing, autoChildren: v })}
+                label={t("cms.autoChildren")}
+                description={locale === "ar" ? "إظهار التصنيفات الفرعية تلقائياً في القائمة المنسدلة (يتم تجاهله إذا أضفت عناصر فرعية يدوياً)" : "Show this category's subcategories in its dropdown automatically (ignored when you add sub-items manually)"}
+              />
+            )}
             {editing.type === "PRODUCT" && (
               <ProductPicker
                 max={1}
@@ -262,6 +292,15 @@ export function MenusView({ data }: { data: Data }) {
               onChange={(v) => setEditing({ ...editing, label: v as Record<string, string> })}
             />
             <FieldError message={editing.type === "URL" && !editing.url ? (locale === "ar" ? "الرابط مطلوب" : "URL is required") : null} />
+            <LocalizedField
+              label={t("cms.badge")}
+              hint={locale === "ar" ? "نص قصير مثل «جديد» أو «-30%» — اختياري" : "Short text like “New” or “-30%” — optional"}
+              value={editing.badge as LocalizedText}
+              onChange={(v) => setEditing({ ...editing, badge: v as Record<string, string> })}
+            />
+            <IconPicker label={t("cms.icon")} value={editing.icon} onChange={(v) => setEditing({ ...editing, icon: v })} />
+            <ImageField label={t("cms.menuImage")} aspect="aspect-[3/1]" folder="menus" value={editing.image ? { id: "", url: editing.image } : null} onChange={(v) => setEditing({ ...editing, image: v?.url ?? null })} />
+            <Switch checked={editing.isVisible} onCheckedChange={(v) => setEditing({ ...editing, isVisible: v })} label={t("cms.visible")} />
             <Switch checked={editing.openInNewTab} onCheckedChange={(v) => setEditing({ ...editing, openInNewTab: v })} label={t("cms.newTab")} />
             <Switch checked={editing.highlight} onCheckedChange={(v) => setEditing({ ...editing, highlight: v })} label={t("cms.highlight")} description={locale === "ar" ? "يظهر بلون مميز (مثل العروض)" : "Shown in the accent colour (e.g. Deals)"} />
           </div>

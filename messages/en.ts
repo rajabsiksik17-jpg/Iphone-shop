@@ -62,6 +62,10 @@ const en = {
     lightMode: "Light mode",
   },
   header: {
+    shopAll: "Shop all {name}",
+    searchCurrency: "Search currencies…",
+    currency: "Currency: {code}",
+    language: "Language",
     freeShippingOver: "Free delivery over {amount}",
     help: "Help",
     trackOrder: "Track order",
@@ -86,6 +90,7 @@ const en = {
     askUs: "Can't find it? Ask us — we'll source it for you",
     browseCategories: "Browse categories",
     trending: "Trending right now",
+    didYouMean: "Did you mean",
     clearRecent: "Clear",
   },
   product: {

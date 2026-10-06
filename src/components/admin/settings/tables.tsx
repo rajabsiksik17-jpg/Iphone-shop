@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition, type ReactNode } from "react";
-import { AlertCircle, Eye, Plus, RotateCcw, Trash2, Truck, Star, Lock } from "lucide-react";
+import { AlertCircle, ChevronDown, Eye, Globe2, Plus, RefreshCw, RotateCcw, Trash2, Truck, Star, Lock } from "lucide-react";
+import { Flag } from "@/components/ui/flag";
+import { timeAgo } from "@/lib/time";
 import { toast } from "sonner";
 import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -9,10 +11,10 @@ import { useAdmin } from "../admin-context";
 import { PageHeader, Panel, Pill, Segmented, Switch } from "../ui";
 import { Label, TextInput, Select, LocalizedField, ColorInput, MoneyInput, TextArea, FieldError } from "../fields";
 import { SortableList } from "../sortable";
-import { saveCurrenciesAction, saveShippingAction, saveOrderStatusesAction, saveTemplateAction, resetTemplateAction, previewTemplateAction } from "@/actions/admin/settings";
+import { saveCurrenciesAction, saveFxSettingsAction, refreshRatesAction, saveShippingAction, saveOrderStatusesAction, saveTemplateAction, resetTemplateAction, previewTemplateAction } from "@/actions/admin/settings";
 import { t as tr, type LocalizedText } from "@/lib/i18n-text";
 import { cn } from "@/lib/utils";
-import type { currencyList, shippingZones, orderStatusList, templateList } from "@/server/admin/settings-data";
+import type { currencyPage, shippingZones, orderStatusList, templateList } from "@/server/admin/settings-data";
 
 let seq = 0;
 const tmp = () => `tmp-${Date.now().toString(36)}${(seq++).toString(36)}`;
@@ -67,25 +69,46 @@ const conflictText = (code: string, ar: boolean) =>
 
 // ──────────────────────────────── Currencies ────────────────────────────────
 
-type Currency = Awaited<ReturnType<typeof currencyList>>[number];
+type CurrencyData = Awaited<ReturnType<typeof currencyPage>>;
+type Currency = CurrencyData["rows"][number];
 
-export function CurrenciesView({ rows, hasOrders }: { rows: Currency[]; hasOrders: boolean }) {
+const INTERVALS = [1, 3, 6, 12, 24, 48] as const;
+
+export function CurrenciesView({ data }: { data: CurrencyData }) {
+  const { rows, hasOrders, fx, catalog } = data;
   const { t, locale } = useAdmin();
   const router = useRouter();
   const ar = locale === "ar";
   const [list, setList] = useState(rows);
   const [dirty, setDirty] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [refreshing, startRefresh] = useTransition();
+  // Pick up fresh server data (e.g. refreshed rates) unless the admin has unsaved edits.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  useEffect(() => {
+    if (!dirtyRef.current) setList(rows);
+  }, [rows]);
   const base = list.find((c) => c.isBase);
   const set = (code: string, patch: Partial<Currency>) => (setList((l) => l.map((c) => (c.code === code ? { ...c, ...patch } : c))), setDirty(true));
   const save = () =>
     start(async () => {
-      const r = await saveCurrenciesAction(list.map(({ position: _p, ...c }) => c));
+      const r = await saveCurrenciesAction(list.map(({ position: _p, rateUpdatedAt: _u, ...c }) => c));
       if (r.ok) {
         toast.success(t("c.saved"));
         setDirty(false);
         router.refresh();
       } else toast.error(conflictText(r.error, ar) ?? t("c.fixErrors"));
+    });
+  const refresh = () =>
+    startRefresh(async () => {
+      if (dirty && !window.confirm(t("c.unsaved"))) return;
+      const r = await refreshRatesAction();
+      if (r.ok) toast.success(ar ? `تم تحديث ${r.data.updated} سعر صرف` : `Updated ${r.data.updated} exchange rates`);
+      else toast.error(ar ? "تعذر الوصول لمزود الأسعار — بقيت آخر أسعار صحيحة" : "Couldn't reach the rates provider — the last valid rates are kept");
+      setDirty(false);
+      router.refresh();
     });
   const sample = (c: Currency) => {
     const n = (1234.5 * c.rate).toFixed(c.decimals).split(".");
@@ -93,88 +116,242 @@ export function CurrenciesView({ rows, hasOrders }: { rows: Currency[]; hasOrder
     const sym = tr(c.symbol, locale) || c.code;
     return c.symbolPosition === "BEFORE" ? `${sym}${num}` : `${num} ${sym}`;
   };
+  const stale = (c: Currency) => !c.isBase && c.autoRate && (!c.rateUpdatedAt || Date.now() - new Date(c.rateUpdatedAt).getTime() > 48 * 3_600_000);
+  const addFromCatalog = (code: string) => {
+    const m = catalog.find((x) => x.code === code);
+    setList((l) => [
+      ...l,
+      { code, name: m?.name ?? { en: code, ar: code }, symbol: m?.symbol ?? { en: code, ar: code }, decimals: m?.decimals ?? 2, symbolPosition: m?.symbolPosition ?? "AFTER", thousandsSep: ",", decimalSep: ".", rate: 1, isActive: true, isBase: false, position: l.length, autoRate: true, rateUpdatedAt: null, flag: m?.flag ?? null },
+    ]);
+    setDirty(true);
+    setOpen(code);
+  };
+
   return (
-    <Shell title={t("s.currencies")} description={ar ? "الأسعار تُخزن بالعملة الأساسية وتُعرض بالعملة التي يختارها المتسوق." : "Prices are stored in the base currency and converted for display."} dirty={dirty} pending={pending} onSave={save} onDiscard={() => (setList(rows), setDirty(false))}>
+    <Shell
+      title={t("s.currencies")}
+      description={ar ? "الأسعار تُخزن بالعملة الأساسية وتُعرض بالعملة التي يختارها المتسوق. الطلبات تحفظ سعر الصرف المستخدم وقت الشراء." : "Prices are stored in the base currency and converted for display. Orders keep the rate used at purchase."}
+      dirty={dirty}
+      pending={pending}
+      onSave={save}
+      onDiscard={() => (setList(rows), setDirty(false))}
+      actions={
+        <Button variant="outline" leftIcon={<RefreshCw className={cn(refreshing && "animate-spin")} />} disabled={refreshing} onClick={refresh}>
+          {ar ? "تحديث الأسعار الآن" : "Refresh rates now"}
+        </Button>
+      }
+    >
+      <FxPanel fx={fx} />
+
       <SortableList
         items={list}
         getId={(c) => c.code}
         onChange={(l) => (setList(l), setDirty(true))}
-        className="space-y-3"
-        render={(c, handle) => (
-          <Panel padded={false}>
-            <div className="flex items-center gap-3 border-b border-ad-border px-4 py-3">
-              {handle}
-              <span className="font-mono text-sm font-semibold">{c.code}</span>
-              {c.isBase && <Pill tone="violet">{t("s.base")}</Pill>}
-              <span className="text-xs text-ad-muted">{sample(c)}</span>
-              <div className="ms-auto flex items-center gap-2">
-                {!c.isBase && <Switch checked={c.isActive} onCheckedChange={(v) => set(c.code, { isActive: v })} label={<span className="text-xs">{t("c.active")}</span>} />}
-                {!c.isBase && (
-                  <Button size="icon-sm" variant="ghost" className="text-red-600" aria-label={t("c.delete")} onClick={() => (setList((l) => l.filter((x) => x.code !== c.code)), setDirty(true))}>
-                    <Trash2 />
+        className="mt-4 space-y-2"
+        render={(c, handle) => {
+          const expanded = open === c.code;
+          return (
+            <Panel padded={false} className={cn(!c.isActive && "opacity-70")}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2.5 sm:px-4">
+                {handle}
+                <Flag code={c.flag} className="h-4 w-6" />
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-semibold">{c.code}</span>
+                    {c.isBase && <Pill tone="violet">{t("s.base")}</Pill>}
+                    {!c.isBase && (c.autoRate ? <Pill tone={stale(c) ? "amber" : "green"}>{ar ? "تلقائي" : "Auto"}</Pill> : <Pill>{ar ? "يدوي" : "Manual"}</Pill>)}
+                  </div>
+                  <p className="truncate text-xs text-ad-muted">{tr(c.name, locale)}</p>
+                </div>
+                <div className="ms-auto flex items-center gap-3 text-end">
+                  <div className="hidden sm:block">
+                    <p className="font-mono text-sm tabular-nums" dir="ltr">
+                      {c.isBase ? "1.00" : `1 ${base?.code ?? ""} = ${c.rate.toLocaleString("en", { maximumFractionDigits: 6 })} ${c.code}`}
+                    </p>
+                    <p className={cn("text-[11px]", stale(c) ? "text-amber-600" : "text-ad-muted")}>
+                      {c.isBase ? sample(c) : c.rateUpdatedAt ? `${ar ? "حُدّث" : "Updated"} ${timeAgo(c.rateUpdatedAt, locale)}` : ar ? "لم يُحدّث بعد" : "Not updated yet"}
+                    </p>
+                  </div>
+                  {!c.isBase && <Switch checked={c.isActive} onCheckedChange={(v) => set(c.code, { isActive: v })} label={<span className="sr-only">{t("c.active")}</span>} />}
+                  <Button size="icon-sm" variant="ghost" aria-label={t("c.edit")} aria-expanded={expanded} onClick={() => setOpen(expanded ? null : c.code)}>
+                    <ChevronDown className={cn("transition", expanded && "rotate-180")} />
                   </Button>
-                )}
-              </div>
-            </div>
-            <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="sm:col-span-2">
-                <LocalizedField label={t("c.name")} value={c.name as LocalizedText} onChange={(v) => set(c.code, { name: v as Record<string, string> })} />
-              </div>
-              <div className="sm:col-span-2">
-                <LocalizedField label={t("s.symbol")} value={c.symbol as LocalizedText} onChange={(v) => set(c.code, { symbol: v as Record<string, string> })} />
-              </div>
-              <div>
-                <Label hint={c.isBase ? "= 1" : base ? `1 ${base.code} = ? ${c.code}` : undefined}>{t("s.rate")}</Label>
-                <TextInput type="number" step="0.0001" min={0} disabled={c.isBase} value={c.rate} onChange={(e) => set(c.code, { rate: Number(e.target.value) })} dir="ltr" />
-              </div>
-              <div>
-                <Label>{t("s.decimals")}</Label>
-                <TextInput type="number" min={0} max={4} disabled={c.isBase && hasOrders} value={c.decimals} onChange={(e) => set(c.code, { decimals: Number(e.target.value) })} />
-              </div>
-              <div>
-                <Label>{t("s.symbolPos")}</Label>
-                <Segmented size="sm" value={c.symbolPosition} onChange={(v) => set(c.code, { symbolPosition: v })} options={[{ value: "BEFORE", label: t("s.before") }, { value: "AFTER", label: t("s.after") }]} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label>{t("s.thousands")}</Label>
-                  <TextInput value={c.thousandsSep} maxLength={2} onChange={(e) => set(c.code, { thousandsSep: e.target.value })} dir="ltr" />
-                </div>
-                <div>
-                  <Label>{t("s.decimalSep")}</Label>
-                  <TextInput value={c.decimalSep} maxLength={2} onChange={(e) => set(c.code, { decimalSep: e.target.value })} dir="ltr" />
                 </div>
               </div>
-            </div>
-            {!c.isBase && !hasOrders && (
-              <div className="border-t border-ad-border px-4 py-2">
-                <button type="button" className="text-xs text-ad-accent hover:underline" onClick={() => (setList((l) => l.map((x) => ({ ...x, isBase: x.code === c.code, rate: x.code === c.code ? 1 : x.rate, isActive: x.code === c.code ? true : x.isActive }))), setDirty(true))}>
-                  {ar ? "اجعلها العملة الأساسية" : "Make base currency"}
-                </button>
-              </div>
-            )}
-          </Panel>
-        )}
+              {expanded && (
+                <div className="space-y-4 border-t border-ad-border p-4">
+                  {!c.isBase && (
+                    <div className="grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
+                      <Segmented
+                        size="sm"
+                        value={c.autoRate ? "auto" : "manual"}
+                        onChange={(v) => set(c.code, { autoRate: v === "auto" })}
+                        options={[
+                          { value: "auto", label: ar ? "سعر تلقائي" : "Automatic rate" },
+                          { value: "manual", label: ar ? "سعر ثابت" : "Fixed rate" },
+                        ]}
+                      />
+                      <div>
+                        <Label hint={base ? `1 ${base.code} = ? ${c.code}` : undefined}>{t("s.rate")}</Label>
+                        <TextInput type="number" step="0.000001" min={0} disabled={c.autoRate} value={c.rate} onChange={(e) => set(c.code, { rate: Number(e.target.value) })} dir="ltr" />
+                      </div>
+                      <p className="text-xs text-ad-muted sm:col-span-2">
+                        {c.autoRate
+                          ? ar
+                            ? `يُحدّث من ${fx.provider} كل ${fx.intervalHours} ساعة. عند تعذر الاتصال تبقى آخر قيمة صحيحة.`
+                            : `Updated from ${fx.provider} every ${fx.intervalHours}h. If the provider is unreachable the last valid rate stays.`
+                          : ar
+                            ? "سعر ثابت تحدده أنت ولا يغيّره التحديث التلقائي."
+                            : "A rate you set; automatic updates never change it."}
+                      </p>
+                    </div>
+                  )}
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <LocalizedField label={t("c.name")} value={c.name as LocalizedText} onChange={(v) => set(c.code, { name: v as Record<string, string> })} />
+                    <LocalizedField label={t("s.symbol")} value={c.symbol as LocalizedText} onChange={(v) => set(c.code, { symbol: v as Record<string, string> })} />
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                    <div>
+                      <Label>{t("s.decimals")}</Label>
+                      <TextInput type="number" min={0} max={4} disabled={c.isBase && hasOrders} value={c.decimals} onChange={(e) => set(c.code, { decimals: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <Label>{t("s.symbolPos")}</Label>
+                      <Segmented size="sm" value={c.symbolPosition} onChange={(v) => set(c.code, { symbolPosition: v })} options={[{ value: "BEFORE", label: t("s.before") }, { value: "AFTER", label: t("s.after") }]} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label>{t("s.thousands")}</Label>
+                        <TextInput value={c.thousandsSep} maxLength={2} onChange={(e) => set(c.code, { thousandsSep: e.target.value })} dir="ltr" />
+                      </div>
+                      <div>
+                        <Label>{t("s.decimalSep")}</Label>
+                        <TextInput value={c.decimalSep} maxLength={2} onChange={(e) => set(c.code, { decimalSep: e.target.value })} dir="ltr" />
+                      </div>
+                    </div>
+                    <div>
+                      <Label hint={ar ? "رمز الدولة" : "Country code"}>{ar ? "العلم" : "Flag"}</Label>
+                      <div className="flex items-center gap-2">
+                        <Flag code={c.flag} className="h-4 w-6" />
+                        <TextInput value={c.flag ?? ""} maxLength={2} onChange={(e) => set(c.code, { flag: e.target.value.toUpperCase().replace(/[^A-Z]/g, "") || null })} dir="ltr" className="font-mono" placeholder="SA" />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3 border-t border-ad-border pt-3 text-xs">
+                    <span className="text-ad-muted">
+                      {ar ? "معاينة:" : "Preview:"} <span className="font-medium text-ad-fg">{sample(c)}</span>
+                    </span>
+                    {!c.isBase && !hasOrders && (
+                      <button type="button" className="text-ad-accent hover:underline" onClick={() => (setList((l) => l.map((x) => ({ ...x, isBase: x.code === c.code, rate: x.code === c.code ? 1 : x.rate, isActive: x.code === c.code ? true : x.isActive }))), setDirty(true))}>
+                        {ar ? "اجعلها العملة الأساسية" : "Make base currency"}
+                      </button>
+                    )}
+                    {!c.isBase && (
+                      <button type="button" className="ms-auto inline-flex items-center gap-1 text-red-600 hover:underline" onClick={() => (setList((l) => l.filter((x) => x.code !== c.code)), setDirty(true))}>
+                        <Trash2 className="size-3.5" /> {t("c.delete")}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </Panel>
+          );
+        }}
       />
-      <AddCurrency existing={list.map((c) => c.code)} onAdd={(code) => (setList((l) => [...l, { code, name: { en: code, ar: code }, symbol: { en: code, ar: code }, decimals: 2, symbolPosition: "BEFORE", thousandsSep: ",", decimalSep: ".", rate: 1, isActive: true, isBase: false, position: l.length }]), setDirty(true))} />
+      <AddCurrency existing={list.map((c) => c.code)} catalog={catalog} onAdd={addFromCatalog} />
     </Shell>
   );
 }
 
-function AddCurrency({ existing, onAdd }: { existing: string[]; onAdd: (code: string) => void }) {
-  const { t } = useAdmin();
+/** Rate-feed status and options (saved on change, separately from the table). */
+function FxPanel({ fx }: { fx: CurrencyData["fx"] }) {
+  const { t, locale } = useAdmin();
+  const router = useRouter();
+  const ar = locale === "ar";
+  const [form, setForm] = useState({ autoUpdate: fx.autoUpdate, intervalHours: fx.intervalHours, currencyByCountry: fx.currencyByCountry });
+  const [pending, start] = useTransition();
+  const update = (patch: Partial<typeof form>) => {
+    const next = { ...form, ...patch };
+    setForm(next);
+    start(async () => {
+      const r = await saveFxSettingsAction(next);
+      if (r.ok) {
+        toast.success(t("c.saved"));
+        router.refresh();
+      } else toast.error(t("c.fixErrors"));
+    });
+  };
+  const failing = Boolean(fx.lastError && (!fx.lastSuccessAt || (fx.lastAttemptAt && fx.lastAttemptAt > fx.lastSuccessAt)));
+  return (
+    <Panel padded={false}>
+      <div className="flex flex-wrap items-center gap-3 border-b border-ad-border px-4 py-3">
+        <span className={cn("grid size-9 place-items-center rounded-xl", failing ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600")}>{failing ? <AlertCircle className="size-5" /> : <Globe2 className="size-5" />}</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold">{ar ? "أسعار الصرف" : "Exchange rates"}</p>
+          <p className="truncate text-xs text-ad-muted">
+            {fx.provider} · {fx.lastSuccessAt ? `${ar ? "آخر تحديث ناجح" : "Last successful update"} ${timeAgo(fx.lastSuccessAt, locale)}` : ar ? "لم يتم التحديث بعد" : "Never updated"}
+          </p>
+        </div>
+        {pending && <RefreshCw className="size-4 animate-spin text-ad-muted" />}
+      </div>
+      {failing && (
+        <p className="border-b border-ad-border bg-amber-500/5 px-4 py-2 text-xs text-amber-700 dark:text-amber-400">
+          {ar ? "فشلت آخر محاولة تحديث — المتجر يستخدم آخر أسعار صحيحة." : "The last update attempt failed — the store keeps using the last valid rates."} <span className="font-mono opacity-80">{fx.lastError}</span>
+        </p>
+      )}
+      <div className="grid gap-4 p-4 md:grid-cols-3">
+        <Switch checked={form.autoUpdate} onCheckedChange={(v) => update({ autoUpdate: v })} label={ar ? "تحديث تلقائي" : "Automatic updates"} description={ar ? "للعملات المضبوطة على «سعر تلقائي»" : "For currencies set to “Automatic rate”"} />
+        <div>
+          <Label>{ar ? "التكرار" : "Frequency"}</Label>
+          <Select value={String(form.intervalHours)} disabled={!form.autoUpdate} onChange={(e) => update({ intervalHours: Number(e.target.value) })}>
+            {[...new Set([...INTERVALS, form.intervalHours])].sort((a, b) => a - b).map((h) => (
+              <option key={h} value={h}>
+                {ar ? `كل ${h} ساعة` : `Every ${h} hour${h > 1 ? "s" : ""}`}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <Switch
+          checked={form.currencyByCountry}
+          onCheckedChange={(v) => update({ currencyByCountry: v })}
+          label={ar ? "عملة حسب الدولة" : "Currency by country"}
+          description={ar ? "يرى الزائر عملة بلده أول مرة، ويمكنه التغيير في أي وقت" : "Visitors first see their country's currency; they can switch any time"}
+        />
+      </div>
+    </Panel>
+  );
+}
+
+function AddCurrency({ existing, catalog, onAdd }: { existing: string[]; catalog: CurrencyData["catalog"]; onAdd: (code: string) => void }) {
+  const { t, locale } = useAdmin();
+  const ar = locale === "ar";
   const [code, setCode] = useState("");
+  const available = catalog.filter((c) => !existing.includes(c.code));
   const valid = /^[A-Z]{3}$/.test(code) && !existing.includes(code);
   return (
-    <div className="mt-4 flex max-w-sm items-end gap-2">
-      <div className="flex-1">
-        <Label hint="ISO 4217">{t("s.addCurrency")}</Label>
-        <TextInput value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3))} placeholder="SAR" dir="ltr" className="font-mono" />
+    <Panel className="mt-4" title={t("s.addCurrency")}>
+      {available.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {available.map((c) => (
+            <button key={c.code} type="button" onClick={() => onAdd(c.code)} className="flex items-center gap-2 rounded-full border border-ad-border px-3 py-1.5 text-[13px] transition hover:border-ad-fg/30 hover:bg-ad-sunken">
+              <Flag code={c.flag} />
+              <span className="font-mono font-semibold">{c.code}</span>
+              <span className="text-ad-muted">{tr(c.name, locale)}</span>
+              <Plus className="size-3.5 text-ad-muted" />
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mt-4 flex max-w-sm items-end gap-2">
+        <div className="flex-1">
+          <Label hint="ISO 4217">{ar ? "رمز عملة آخر" : "Other currency code"}</Label>
+          <TextInput value={code} onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 3))} placeholder="CHF" dir="ltr" className="font-mono" />
+        </div>
+        <Button variant="outline" leftIcon={<Plus />} disabled={!valid} onClick={() => (onAdd(code), setCode(""))}>
+          {t("c.add")}
+        </Button>
       </div>
-      <Button variant="outline" leftIcon={<Plus />} disabled={!valid} onClick={() => (onAdd(code), setCode(""))}>
-        {t("c.add")}
-      </Button>
-    </div>
+    </Panel>
   );
 }
 

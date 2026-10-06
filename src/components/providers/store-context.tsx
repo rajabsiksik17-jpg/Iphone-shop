@@ -7,7 +7,7 @@ export type StoreConfig = {
   locale: "ar" | "en";
   storeName: string;
   money: MoneyContext;
-  currencies: { code: string; symbol: string; name: string }[];
+  currencies: { code: string; symbol: string; name: string; flag: string | null }[];
   user: { id: string; name: string; email: string } | null;
   defaultCountry: string;
   detectedCountry: string | null;
