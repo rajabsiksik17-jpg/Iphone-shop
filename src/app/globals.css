@@ -1,0 +1,402 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.ad-dark, .ad-dark *));
+
+/*
+ * Design tokens. Storefront colours come from Settings → Appearance and are
+ * injected as --nq-* variables at render time; every component consumes the
+ * semantic Tailwind tokens below, so a theme change restyles everything.
+ */
+:root {
+  --nq-primary: #0f172a;
+  --nq-primary-fg: #ffffff;
+  --nq-accent: #4f46e5;
+  --nq-accent-fg: #ffffff;
+  --nq-bg: #ffffff;
+  --nq-surface: #f6f7f9;
+  --nq-fg: #0b1220;
+  --nq-muted: #64748b;
+  --nq-border: #e5e7eb;
+  --nq-sale: #e11d48;
+  --nq-success: #059669;
+  --nq-warning: #d97706;
+  --nq-radius: 14px;
+  --nq-container: 1360px;
+  --nq-shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px -12px rgb(15 23 42 / 0.12);
+  --nq-shadow-pop: 0 12px 40px -12px rgb(15 23 42 / 0.25);
+  --nq-btn-radius: 999px;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  --color-primary: var(--nq-primary);
+  --color-primary-fg: var(--nq-primary-fg);
+  --color-accent: var(--nq-accent);
+  --color-accent-fg: var(--nq-accent-fg);
+  --color-bg: var(--nq-bg);
+  --color-surface: var(--nq-surface);
+  --color-fg: var(--nq-fg);
+  --color-muted: var(--nq-muted);
+  --color-border: var(--nq-border);
+  --color-sale: var(--nq-sale);
+  --color-success: var(--nq-success);
+  --color-warning: var(--nq-warning);
+
+  /* Admin palette (independent of the storefront theme; supports dark mode). */
+  --color-ad-bg: var(--ad-bg);
+  --color-ad-panel: var(--ad-panel);
+  --color-ad-sunken: var(--ad-sunken);
+  --color-ad-fg: var(--ad-fg);
+  --color-ad-muted: var(--ad-muted);
+  --color-ad-border: var(--ad-border);
+  --color-ad-accent: var(--ad-accent);
+  --color-ad-accent-fg: var(--ad-accent-fg);
+  --color-ad-hover: var(--ad-hover);
+
+  --radius-card: var(--nq-radius);
+  --radius-btn: var(--nq-btn-radius);
+  --shadow-card: var(--nq-shadow-card);
+  --shadow-pop: var(--nq-shadow-pop);
+
+  --font-sans: var(--font-latin), var(--font-arabic), ui-sans-serif, system-ui, sans-serif;
+  --font-arabic-first: var(--font-arabic), var(--font-latin), ui-sans-serif, system-ui, sans-serif;
+
+  --animate-fade-up: fade-up 0.6s var(--ease-out-expo) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-scale-in: scale-in 0.18s var(--ease-out-expo) both;
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-heart: heart 0.45s var(--ease-out-expo);
+  --animate-bump: bump 0.4s var(--ease-out-expo);
+}
+
+.admin-vars,
+:root {
+  --ad-bg: #f5f6f8;
+  --ad-panel: #ffffff;
+  --ad-sunken: #f0f2f5;
+  --ad-fg: #0d1321;
+  --ad-muted: #667085;
+  --ad-border: #e6e8ec;
+  --ad-accent: #4f46e5;
+  --ad-accent-fg: #ffffff;
+  --ad-hover: #f2f4f7;
+}
+html.ad-dark {
+  --ad-bg: #0b0e14;
+  --ad-panel: #11151d;
+  --ad-sunken: #0e1219;
+  --ad-fg: #e7eaf0;
+  --ad-muted: #8b95a7;
+  --ad-border: #1e2430;
+  --ad-accent: #818cf8;
+  --ad-accent-fg: #0b0e14;
+  --ad-hover: #171c26;
+  color-scheme: dark;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+  html[dir="rtl"] body {
+    font-family: var(--font-arabic-first);
+  }
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  }
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  img {
+    max-width: 100%;
+  }
+}
+
+@layer utilities {
+  .container-store {
+    width: 100%;
+    max-width: var(--nq-container);
+    margin-inline: auto;
+    padding-inline: 1rem;
+  }
+  @media (min-width: 640px) {
+    .container-store {
+      padding-inline: 1.5rem;
+    }
+  }
+  @media (min-width: 1024px) {
+    .container-store {
+      padding-inline: 2rem;
+    }
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .flip-rtl:where([dir="rtl"] *) {
+    transform: scaleX(-1);
+  }
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, var(--color-surface) 25%, color-mix(in srgb, var(--color-surface) 60%, white) 37%, var(--color-surface) 63%);
+    background-size: 400% 100%;
+    animation: var(--animate-shimmer);
+  }
+  .admin-surface .skeleton {
+    background: linear-gradient(90deg, var(--ad-sunken) 25%, var(--ad-hover) 37%, var(--ad-sunken) 63%);
+    background-size: 400% 100%;
+  }
+}
+
+/* Prose for CMS / product descriptions */
+.prose-store {
+  line-height: 1.75;
+  color: color-mix(in srgb, var(--color-fg) 86%, transparent);
+}
+.prose-store > * + * {
+  margin-top: 1em;
+}
+.prose-store h2 {
+  font-size: 1.35rem;
+  font-weight: 650;
+  margin-top: 1.8em;
+  color: var(--color-fg);
+  letter-spacing: -0.01em;
+}
+.prose-store h3 {
+  font-size: 1.1rem;
+  font-weight: 650;
+  margin-top: 1.4em;
+  color: var(--color-fg);
+}
+.prose-store ul {
+  list-style: disc;
+  padding-inline-start: 1.25rem;
+}
+.prose-store ol {
+  list-style: decimal;
+  padding-inline-start: 1.25rem;
+}
+.prose-store li + li {
+  margin-top: 0.35em;
+}
+.prose-store a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.prose-store strong {
+  color: var(--color-fg);
+  font-weight: 650;
+}
+.prose-store blockquote {
+  border-inline-start: 3px solid var(--color-border);
+  padding-inline-start: 1rem;
+  color: var(--color-muted);
+}
+
+/* Announcement marquee: duplicated track translated by 50%. Direction-aware. */
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee var(--marquee-duration, 40s) linear infinite;
+}
+.marquee-track[data-reverse="true"] {
+  animation-direction: reverse;
+}
+[dir="rtl"] .marquee-track {
+  animation-name: marquee-rtl;
+}
+.marquee:hover .marquee-track[data-pause="true"] {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+@keyframes marquee-rtl {
+  from { transform: translateX(0); }
+  to { transform: translateX(50%); }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes shimmer {
+  from { background-position: 100% 50%; }
+  to { background-position: 0 50%; }
+}
+@keyframes heart {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.35); }
+  70% { transform: scale(0.92); }
+  100% { transform: scale(1); }
+}
+@keyframes bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+@keyframes slide-in-end {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+@keyframes slide-out-end {
+  from { transform: none; }
+  to { transform: translateX(100%); }
+}
+@keyframes slide-in-start {
+  from { transform: translateX(-100%); }
+  to { transform: none; }
+}
+@keyframes slide-out-start {
+  from { transform: none; }
+  to { transform: translateX(-100%); }
+}
+@keyframes slide-in-bottom {
+  from { transform: translateY(100%); }
+  to { transform: none; }
+}
+@keyframes slide-out-bottom {
+  from { transform: none; }
+  to { transform: translateY(100%); }
+}
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Radix dialog/sheet motion driven by data-state, RTL-aware. */
+.sheet-overlay[data-state="open"] { animation: overlay-in 0.25s ease both; }
+.sheet-overlay[data-state="closed"] { animation: overlay-out 0.2s ease both; }
+.sheet[data-side="end"][data-state="open"] { animation: slide-in-end 0.42s var(--ease-out-expo) both; }
+.sheet[data-side="end"][data-state="closed"] { animation: slide-out-end 0.25s ease-in both; }
+.sheet[data-side="start"][data-state="open"] { animation: slide-in-start 0.42s var(--ease-out-expo) both; }
+.sheet[data-side="start"][data-state="closed"] { animation: slide-out-start 0.25s ease-in both; }
+[dir="rtl"] .sheet[data-side="end"][data-state="open"] { animation-name: slide-in-start; }
+[dir="rtl"] .sheet[data-side="end"][data-state="closed"] { animation-name: slide-out-start; }
+[dir="rtl"] .sheet[data-side="start"][data-state="open"] { animation-name: slide-in-end; }
+[dir="rtl"] .sheet[data-side="start"][data-state="closed"] { animation-name: slide-out-end; }
+.sheet[data-side="bottom"][data-state="open"] { animation: slide-in-bottom 0.42s var(--ease-out-expo) both; }
+.sheet[data-side="bottom"][data-state="closed"] { animation: slide-out-bottom 0.25s ease-in both; }
+.dialog-content[data-state="open"] { animation: scale-in 0.22s var(--ease-out-expo) both; }
+.dialog-content[data-state="closed"] { animation: overlay-out 0.15s ease both; }
+.pop[data-state="open"] { animation: scale-in 0.16s var(--ease-out-expo) both; }
+.pop[data-state="closed"] { animation: overlay-out 0.12s ease both; }
+
+/* Scroll-reveal for CMS sections (progressive: content is visible without JS). */
+@supports (animation-timeline: view()) {
+  .reveal {
+    animation: fade-up linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 35%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .marquee-track {
+    animation: none !important;
+    flex-wrap: wrap;
+    width: auto;
+  }
+}
+
+/*
+ * Admin mode: remap the shared semantic tokens onto the admin palette so the
+ * same UI primitives (buttons, inputs, dialogs, menus) serve both apps and
+ * follow the admin's light/dark preference — including portalled overlays.
+ */
+html.admin-mode {
+  --nq-bg: var(--ad-panel);
+  --nq-surface: var(--ad-sunken);
+  --nq-fg: var(--ad-fg);
+  --nq-muted: var(--ad-muted);
+  --nq-border: var(--ad-border);
+  --nq-primary: var(--ad-fg);
+  --nq-primary-fg: var(--ad-panel);
+  --nq-accent: var(--ad-accent);
+  --nq-accent-fg: var(--ad-accent-fg);
+  --nq-radius: 12px;
+  --nq-btn-radius: 10px;
+  --nq-shadow-card: 0 1px 2px rgb(16 24 40 / 0.05);
+  --nq-shadow-pop: 0 16px 48px -12px rgb(16 24 40 / 0.28);
+  --font-latin: var(--font-geist);
+  --font-arabic: var(--font-plex-arabic);
+}
+html.admin-mode body {
+  background: var(--ad-bg);
+}
+html.admin-mode.ad-dark {
+  --nq-shadow-pop: 0 16px 48px -12px rgb(0 0 0 / 0.6);
+}
+.recharts-wrapper text {
+  fill: var(--ad-muted);
+}
+
+/* Space between page content and the footer. Pages ending in a section with its
+   own background (data-bleed) sit flush against the footer instead. */
+.store-main {
+  padding-bottom: 4rem;
+}
+@media (min-width: 768px) {
+  .store-main {
+    padding-bottom: 6rem;
+  }
+}
+.store-main:has(> [data-section]:last-child[data-bleed]) {
+  padding-bottom: 0;
+}
+
+/* Listing refresh feedback while filters apply (set by the filter widgets). */
+[data-listing-grid] {
+  transition: opacity 0.25s ease;
+}
+body[data-listing-loading] [data-listing-grid] {
+  opacity: 0.45;
+  pointer-events: none;
+}
