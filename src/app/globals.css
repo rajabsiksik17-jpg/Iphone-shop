@@ -389,9 +389,6 @@ html.admin-mode.ad-dark {
     padding-bottom: 6rem;
   }
 }
-.store-main:has(> [data-section]:last-child[data-bleed]) {
-  padding-bottom: 0;
-}
 
 /* Listing refresh feedback while filters apply (set by the filter widgets). */
 [data-listing-grid] {

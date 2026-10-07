@@ -135,9 +135,9 @@ function CategoryPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigat
   const root = multi ? item.children[active] : item;
   const columns = root?.children ?? [];
   return (
-    <div className={cn("grid min-h-[22rem]", multi ? "grid-cols-[17rem_1fr]" : "grid-cols-1")}>
+    <div className={cn("grid", multi ? "h-[min(30rem,calc(100dvh-11rem))] grid-cols-[17rem_1fr]" : "max-h-[min(30rem,calc(100dvh-11rem))] grid-cols-1")}>
       {multi && (
-        <ul className="border-e border-border bg-surface/60 p-2">
+        <ul className="overflow-y-auto overscroll-contain border-e border-border bg-surface/60 p-2 [scrollbar-width:thin]">
           {item.children.map((c, i) => (
             <li key={c.id}>
               <Link
@@ -156,7 +156,7 @@ function CategoryPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigat
           ))}
         </ul>
       )}
-      <div className="p-6">
+      <div className="min-h-0 overflow-y-auto overscroll-contain p-6 [scrollbar-width:thin]">
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-lg font-semibold tracking-tight">{root?.label}</h3>
           <Link href={root?.href ?? item.href} onClick={onNavigate} className="flex items-center gap-1.5 text-sm font-medium text-accent hover:underline">
@@ -190,8 +190,17 @@ function CategoryPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigat
             ))}
           </div>
         ) : (
-          <Link href={root?.href ?? item.href} onClick={onNavigate} className="block overflow-hidden rounded-2xl bg-surface">
-            <Thumb src={root?.image ?? null} className="aspect-[16/7] w-full rounded-none" />
+          // A category without subcategories: a compact card instead of a full-width image.
+          <Link href={root?.href ?? item.href} onClick={onNavigate} className="group flex max-w-xl items-center gap-5 rounded-2xl border border-border p-4 transition hover:border-fg/20 hover:shadow-card">
+            <Thumb src={root?.image ?? null} className="size-28 shrink-0 rounded-xl transition group-hover:scale-[1.03]" />
+            <span className="min-w-0">
+              <span className="block text-base font-semibold">{root?.label}</span>
+              {root?.count ? <span className="mt-0.5 block text-sm text-muted">{t("productCount", { count: root.count })}</span> : null}
+              <span className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-accent">
+                {t("shopAll", { name: root?.label ?? "" })}
+                <ArrowLeft className="size-4 ltr:rotate-180" />
+              </span>
+            </span>
           </Link>
         )}
       </div>
@@ -393,9 +402,12 @@ function MobileDrawer({ open, onOpenChange, storeName, menu, topLinks, startAtCa
                     </span>
                     {t("common.home")}
                   </Link>
-                  {menu.map((i) => (
-                    <DrawerRow key={i.id} item={i} onDrill={push} onNavigate={close} />
-                  ))}
+                  {/* The Home row above already links to "/" — skip a menu item for it. */}
+                  {menu
+                    .filter((i) => i.href !== "/")
+                    .map((i) => (
+                      <DrawerRow key={i.id} item={i} onDrill={push} onNavigate={close} />
+                    ))}
                 </nav>
                 {topLinks.length > 0 && (
                   <nav className="border-t border-border pt-3" aria-label={t("header.help")}>
@@ -438,14 +450,32 @@ export function Header({ storeName, logoUrl, menu, topLinks, freeShippingText, s
   const [scrolled, setScrolled] = useState(false);
   const [tucked, setTucked] = useState(false);
   const lastY = useRef(0);
+  const anchorY = useRef(0);
+  const tuckedRef = useRef(false);
+  const lockUntil = useRef(0);
 
   const onScroll = useCallback(() => {
     const y = window.scrollY;
     setScrolled(y > 8);
-    // Hysteresis avoids flicker on small scroll jitters.
-    if (y > 160 && y > lastY.current + 6) setTucked(true);
-    else if (y < lastY.current - 6 || y < 120) setTucked(false);
+    const now = performance.now();
+    // Tucking changes the header's height, which makes the browser adjust the
+    // scroll position (scroll anchoring) and fire scroll events in the opposite
+    // direction. Ignore those while the transition runs, or the header would
+    // flip back and forth (the "shake" when scrolling up).
+    if (now < lockUntil.current) {
+      lastY.current = anchorY.current = y;
+      return;
+    }
+    // Change direction only after a deliberate movement (not tiny jitters).
+    if ((y > lastY.current) !== (y > anchorY.current)) anchorY.current = lastY.current;
     lastY.current = y;
+    const next = y < 120 ? false : y - anchorY.current > 24 ? true : anchorY.current - y > 24 ? false : tuckedRef.current;
+    if (next !== tuckedRef.current) {
+      tuckedRef.current = next;
+      lockUntil.current = now + 450;
+      anchorY.current = y;
+      setTucked(next);
+    }
   }, []);
 
   useEffect(() => {

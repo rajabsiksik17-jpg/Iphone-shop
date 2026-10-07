@@ -138,9 +138,29 @@ export function CurrencySelect({ className }: { className?: string }) {
   );
 }
 
-/** Inline list for the mobile drawer. */
+/**
+ * Mobile drawer: a compact dropdown — the current currency on one row; tapping
+ * it expands the searchable list in place (no overlay on top of the drawer).
+ */
 export function CurrencyList() {
-  const { currencies } = useStore();
+  const t = useTranslations("header");
+  const { currencies, money } = useStore();
+  const [open, setOpen] = useState(false);
   if (currencies.length < 2) return null;
-  return <CurrencyRows />;
+  const current = currencies.find((c) => c.code === money.display.code);
+  return (
+    <div className="rounded-xl border border-border">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={t("currency", { code: money.display.code })} className="flex w-full items-center gap-3 px-3 py-2.5 text-start text-sm">
+        <Flag code={current?.flag} />
+        <span className="font-semibold tabular">{money.display.code}</span>
+        <span className="min-w-0 flex-1 truncate text-muted">{current?.name}</span>
+        <ChevronDown className={cn("size-4 text-muted transition", open && "rotate-180")} />
+      </button>
+      {open && (
+        <div className="border-t border-border p-1.5">
+          <CurrencyRows dense onPick={() => setOpen(false)} />
+        </div>
+      )}
+    </div>
+  );
 }
