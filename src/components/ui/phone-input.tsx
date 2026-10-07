@@ -7,13 +7,15 @@ import enLabels from "react-phone-number-input/locale/en.json";
 import { useLocale } from "next-intl";
 import { cn } from "@/lib/utils";
 import { useOptionalStore } from "@/components/providers/store-context";
+import { PhoneCountrySelect } from "@/components/store/geo-select";
 
 /**
  * The one phone input used everywhere (checkout, register, profile, address,
  * contact, admin). Backed by libphonenumber metadata for every country:
  * flag, calling code, as-you-type formatting and validation. Emits E.164
- * (e.g. +9627XXXXXXXX). Country defaults to the visitor's detected country,
- * falling back to Jordan; the shopper can always change it.
+ * (e.g. +9665XXXXXXXX). Country defaults to the visitor's detected country,
+ * falling back to Saudi Arabia (+966); the shopper can always change it from
+ * the searchable country dropdown (flags, names in both languages, codes).
  */
 export function PhoneInput({
   value,
@@ -40,7 +42,7 @@ export function PhoneInput({
 }) {
   const locale = useLocale();
   const store = useOptionalStore();
-  const country = (defaultCountry ?? store?.detectedCountry ?? store?.defaultCountry ?? "JO").toUpperCase() as Country;
+  const country = (defaultCountry ?? store?.detectedCountry ?? store?.defaultCountry ?? "SA").toUpperCase() as Country;
   return (
     <div
       dir="ltr"
@@ -58,6 +60,7 @@ export function PhoneInput({
         countryCallingCodeEditable={false}
         defaultCountry={country}
         flags={flags}
+        countrySelectComponent={PhoneCountrySelect}
         labels={locale === "ar" ? arLabels : enLabels}
         value={value || undefined}
         onChange={(v) => onChange(v ?? "")}

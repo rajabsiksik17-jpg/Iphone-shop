@@ -17,6 +17,7 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
   { title: "s.checkout", section: "nav.settings", href: "/admin/settings/checkout", permission: "settings.general", keywords: ["checkout", "guest", "terms", "minimum", "postal", "notes", "دفع", "شروط"] },
   { title: "s.tax", section: "nav.settings", href: "/admin/settings/tax", permission: "settings.general", keywords: ["tax", "vat", "sales tax", "ضريبة"] },
   { title: "s.shipping", section: "nav.settings", href: "/admin/settings/shipping", permission: "settings.shipping", keywords: ["shipping", "delivery", "zone", "free shipping", "pickup", "rate", "شحن", "توصيل"] },
+  { title: "s.regions", section: "nav.settings", href: "/admin/settings/regions", permission: "settings.shipping", keywords: ["city", "cities", "governorate", "region", "country", "delivery price", "delivery time", "saudi", "مدينة", "مدن", "محافظة", "منطقة", "دولة", "سعر التوصيل", "مدة التوصيل", "السعودية"] },
   { title: "s.payments", section: "nav.settings", href: "/admin/integrations?category=payments", permission: "settings.payments", keywords: ["payment", "stripe", "paypal", "cod", "cash", "bank", "cliq", "gateway", "دفع", "كاش"] },
   { title: "s.email", section: "nav.settings", href: "/admin/settings/email", permission: "settings.email", keywords: ["smtp", "imap", "email", "mail", "from", "test email", "بريد"] },
   { title: "s.templates", section: "nav.settings", href: "/admin/settings/email/templates", permission: "settings.email", keywords: ["template", "email template", "order confirmation", "welcome", "قالب"] },

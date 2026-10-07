@@ -16,6 +16,8 @@ type CartCtx = {
   pending: Set<string>;
   lastAdded: { name: string; image: string | null } | null;
   refresh: () => Promise<void>;
+  /** Use totals computed elsewhere (e.g. with the checkout destination). */
+  replace: (totals: CartTotals) => void;
   add: (input: { productId: string; variantId?: string | null; quantity?: number; name: string; price: number; brand?: string | null; category?: string | null; openDrawer?: boolean }) => Promise<boolean>;
   update: (itemId: string, quantity: number) => Promise<void>;
   remove: (itemId: string) => Promise<void>;
@@ -117,7 +119,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const applyCoupon = useCallback(async (code: string | null) => apply(await applyCouponAction({ code, locale })), [locale, apply]);
   const usePoints = useCallback(async (points: number) => void apply(await usePointsAction({ points, locale })), [locale, apply]);
 
-  return <Ctx.Provider value={{ totals, loading, pending, lastAdded, refresh, add, update, remove, applyCoupon, usePoints }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ totals, loading, pending, lastAdded, refresh, replace: setTotals, add, update, remove, applyCoupon, usePoints }}>{children}</Ctx.Provider>;
 }
 
 export function useCart() {

@@ -108,7 +108,7 @@ export async function shippingZones() {
     name: z.name,
     countries: z.countries,
     isActive: z.isActive,
-    methods: z.methods.map((m) => ({ id: m.id, name: m.name as Record<string, string>, description: m.description as Record<string, string>, type: m.type, cost: m.cost, freeOver: m.freeOver, perKg: m.perKg, minDays: m.minDays, maxDays: m.maxDays, isActive: m.isActive })),
+    methods: z.methods.map((m) => ({ id: m.id, name: m.name as Record<string, string>, description: m.description as Record<string, string>, type: m.type, cost: m.cost, freeOver: m.freeOver, perKg: m.perKg, minDays: m.minDays, maxDays: m.maxDays, isActive: m.isActive, limitToRegions: m.limitToRegions })),
   }));
 }
 
@@ -124,6 +124,7 @@ const methodSchema = z
     minDays: z.number().int().min(0).max(90).nullable(),
     maxDays: z.number().int().min(0).max(90).nullable(),
     isActive: z.boolean(),
+    limitToRegions: z.boolean().default(false),
   })
   .refine((m) => m.type !== "FREE_OVER" || (m.freeOver ?? 0) > 0, { path: ["freeOver"], message: "required" })
   .refine((m) => m.minDays == null || m.maxDays == null || m.minDays <= m.maxDays, { path: ["maxDays"], message: "min_gt_max" });

@@ -9,6 +9,7 @@
 import "dotenv/config";
 import { db } from "../src/server/db";
 import { buildDefaultNavigation, NAV_VERSION } from "../src/server/setup/navigation";
+import { setupSaudiRegions } from "../src/server/setup/regions";
 import { LEGACY_PAGE_SLUGS } from "../src/config/legal";
 import { LEGAL_PAGES } from "../prisma/seed/content-data";
 import { LEGACY_LEGAL } from "./legacy-legal";
@@ -86,6 +87,8 @@ async function main() {
 
   const forceNav = process.argv.includes("--replace-nav");
   const navOutdated = (state.nav ?? 1) < NAV_VERSION;
+  const regions = await setupSaudiRegions();
+  if (regions.added) console.log(`  · Imported ${regions.added} Saudi cities & governorates`);
   await buildDefaultNavigation({ replace: forceNav || navOutdated });
   console.log(`  · Navigation ${forceNav || navOutdated ? `rebuilt (v${NAV_VERSION})` : "up to date"}`);
 

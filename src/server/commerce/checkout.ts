@@ -1,4 +1,5 @@
 import "server-only";
+import { resolveDestination } from "./regions";
 import { z } from "zod";
 import { isValidPhoneNumber, parsePhoneNumber } from "libphonenumber-js";
 import { db } from "../db";
@@ -37,6 +38,8 @@ export const addressSchema = z.object({
   line1: z.string().trim().min(3).max(200),
   line2: z.string().trim().max(200).optional().or(z.literal("")),
   postalCode: z.string().trim().max(20).optional().or(z.literal("")),
+  /** The chosen city/governorate when the country has a city list. */
+  regionId: z.string().max(64).nullable().optional(),
 });
 
 export const checkoutSchema = z.object({
@@ -102,14 +105,18 @@ export async function placeOrder(raw: unknown, locale: string): Promise<PlaceOrd
   if (checkoutCfg.allowedCountries.length && !checkoutCfg.allowedCountries.includes(input.address.country)) throw Errors.invalid({ "address.country": ["not_shipped"] });
   if (checkoutCfg.postalCode === "required" && !input.address.postalCode) throw Errors.invalid({ "address.postalCode": ["required"] });
   if (!cart || !cart.items.length) throw new AppError("cart_empty", 422);
+  // Countries with a city list require a valid city; its name becomes the order's city.
+  const dest = await resolveDestination(input.address.country, input.address.regionId);
+  if (dest.region) input.address.city = t(dest.region.name, locale) || input.address.city;
+  input.address.regionId = dest.region?.id ?? null;
 
   const email = user?.email ?? input.email;
-  const totals = await computeCart(cart, locale, { email, userId: user?.id, country: input.address.country });
+  const totals = await computeCart(cart, locale, { email, userId: user?.id, country: input.address.country, regionId: input.address.regionId });
   if (totals.hasIssues) throw new AppError("cart_has_issues", 409);
   if (totals.coupon && !totals.coupon.valid) throw new AppError("coupon_invalid", 409, { reason: totals.coupon.reason });
   if (totals.subtotal < checkoutCfg.minOrderAmount) throw new AppError("below_minimum", 422);
 
-  const quotes = await quoteShipping({ country: input.address.country, subtotal: totals.subtotal - totals.discountTotal, weightGrams: totals.weightGrams, freeShipping: totals.freeShipping, requiresShipping: totals.requiresShipping, locale });
+  const quotes = await quoteShipping({ country: input.address.country, regionId: input.address.regionId, subtotal: totals.subtotal - totals.discountTotal, weightGrams: totals.weightGrams, freeShipping: totals.freeShipping, requiresShipping: totals.requiresShipping, locale });
   const shipping = quotes.find((q) => q.id === input.shippingMethodId);
   if (!shipping) throw Errors.invalid({ shippingMethodId: ["unavailable"] });
 

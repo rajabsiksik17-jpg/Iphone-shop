@@ -1,5 +1,8 @@
 "use server";
 
+import { resolveDestination } from "@/server/commerce/regions";
+import { getLocale } from "next-intl/server";
+import { t } from "@/lib/i18n-text";
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { db } from "@/server/db";
@@ -27,7 +30,10 @@ export async function saveAddressAction(input: z.input<typeof addressSchema> & {
   return run(async () => {
     const user = await requireCustomer();
     const p = addressSchema.extend({ id: idSchema.optional(), label: z.string().trim().max(40).optional(), isDefault: z.boolean().optional() }).parse(input);
-    const data = { label: p.label || null, fullName: p.fullName, phone: p.phone, country: p.country, city: p.city, area: p.area || null, line1: p.line1, line2: p.line2 || null, postalCode: p.postalCode || null };
+    // Countries with a city list: the city must be one of them (its name is stored with the id).
+    const dest = await resolveDestination(p.country, p.regionId);
+    const city = dest.region ? t(dest.region.name, (await getLocale()) as "ar" | "en") || p.city : p.city;
+    const data = { label: p.label || null, fullName: p.fullName, phone: p.phone, country: p.country, city, regionId: dest.region?.id ?? null, area: p.area || null, line1: p.line1, line2: p.line2 || null, postalCode: p.postalCode || null };
     await db.$transaction(async (tx) => {
       const count = await tx.address.count({ where: { userId: user.id } });
       const makeDefault = p.isDefault || count === 0;

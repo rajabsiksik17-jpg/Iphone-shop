@@ -9,6 +9,7 @@ import { audit } from "@/server/audit";
 import { t } from "@/lib/i18n-text";
 import * as data from "@/server/admin/settings-data";
 import * as storeType from "@/server/admin/store-type";
+import * as regions from "@/server/admin/regions";
 import { adminRun } from "./_base";
 
 const groupSchema = z.enum(Object.keys(settingsSchemas) as [SettingsGroup, ...SettingsGroup[]]);
@@ -119,4 +120,38 @@ export async function saveStoreTypeAction(input: unknown) {
 
 export async function setCardAttributesAction(ids: string[]) {
   return adminRun("catalog.edit", (s) => storeType.setCardAttributes(ids, s));
+}
+
+// ─────────────── Countries & cities ───────────────
+
+export async function countryRegionsAction(country: string, locale: string) {
+  return adminRun("settings.shipping", () => regions.countryRegions(country, z.enum(["ar", "en"]).parse(locale)), { revalidate: false });
+}
+
+export async function saveCountriesAction(input: { countries: string[]; defaultCountry: string }) {
+  return adminRun("settings.shipping", (s) => regions.saveCountries(input, s));
+}
+
+export async function importRegionsAction(country: string) {
+  return adminRun("settings.shipping", (s) => regions.importPresetRegions(country, s));
+}
+
+export async function saveRegionAction(id: string | null, input: unknown) {
+  return adminRun("settings.shipping", (s) => regions.saveRegion(id, input, s));
+}
+
+export async function bulkRegionsAction(ids: string[], op: "activate" | "deactivate" | "delete") {
+  return adminRun("settings.shipping", (s) => regions.bulkRegions(ids, op, s));
+}
+
+export async function reorderRegionsAction(ids: string[]) {
+  return adminRun("settings.shipping", () => regions.reorderRegions(ids));
+}
+
+export async function saveRegionRatesAction(regionIds: string[], rates: unknown) {
+  return adminRun("settings.shipping", (s) => regions.saveRegionRates(regionIds, rates, s));
+}
+
+export async function setMethodLimitAction(methodId: string, limit: boolean) {
+  return adminRun("settings.shipping", (s) => regions.setMethodLimit(methodId, limit, s));
 }

@@ -11,6 +11,8 @@ import { useAdmin } from "../admin-context";
 import { PageHeader, Panel, Pill, Segmented, Switch } from "../ui";
 import { Label, TextInput, Select, LocalizedField, ColorInput, MoneyInput, TextArea, FieldError } from "../fields";
 import { SortableList } from "../sortable";
+import { CountryChips } from "./regions";
+import { getCountries } from "libphonenumber-js";
 import { saveCurrenciesAction, saveFxSettingsAction, refreshRatesAction, saveShippingAction, saveOrderStatusesAction, saveTemplateAction, resetTemplateAction, previewTemplateAction } from "@/actions/admin/settings";
 import { t as tr, type LocalizedText } from "@/lib/i18n-text";
 import { cn } from "@/lib/utils";
@@ -366,6 +368,10 @@ const toZoneForm = (zones: Zone[]): ZoneForm[] => zones.map((z) => ({ ...z, key:
 
 export function ShippingView({ zones }: { zones: Zone[] }) {
   const { t, locale, money, fmt } = useAdmin();
+  const allCountries = useMemo(() => {
+    const names = new Intl.DisplayNames([locale], { type: "region" });
+    return getCountries().map((code) => ({ code, name: names.of(code) ?? code })).sort((a, b) => a.name.localeCompare(b.name, locale));
+  }, [locale]);
   const router = useRouter();
   const ar = locale === "ar";
   const [list, setList] = useState(() => toZoneForm(zones));
@@ -426,13 +432,7 @@ export function ShippingView({ zones }: { zones: Zone[] }) {
             <div className="space-y-4 p-4">
               <div>
                 <Label>{t("s.countries")}</Label>
-                <TextInput
-                  defaultValue={z.countries.join(", ")}
-                  onBlur={(e) => setZone(z.key, { countries: [...new Set(e.target.value.split(/[\s,]+/).map((c) => c.trim().toUpperCase()).filter((c) => /^[A-Z]{2}$/.test(c)))] })}
-                  placeholder="JO, PS"
-                  dir="ltr"
-                  className="font-mono"
-                />
+                <CountryChips value={z.countries} onChange={(countries) => setZone(z.key, { countries })} all={allCountries} label={ar ? "أضف دولة…" : "Add a country…"} />
                 {!z.countries.length && <p className="mt-1 text-xs text-ad-muted">{ar ? "بقية العالم" : "Rest of world"}</p>}
               </div>
               <div className="space-y-3">
@@ -444,6 +444,7 @@ export function ShippingView({ zones }: { zones: Zone[] }) {
                         <span className="text-sm font-medium">{tr(m.name, locale) || "—"}</span>
                         <span className="text-xs text-ad-muted">{summary(m)}</span>
                         <div className="ms-auto flex items-center gap-2">
+                          <Switch checked={m.limitToRegions} onCheckedChange={(v) => setMethod(z.key, m.key, { limitToRegions: v })} label={<span className="text-xs text-ad-muted">{ar ? "مدن محددة فقط" : "Selected cities only"}</span>} />
                           <Switch checked={m.isActive} onCheckedChange={(v) => setMethod(z.key, m.key, { isActive: v })} label={<span className="sr-only">{t("c.active")}</span>} />
                           <Button size="icon-sm" variant="ghost" className="text-red-600" aria-label={t("c.delete")} onClick={() => setZone(z.key, { methods: z.methods.filter((x) => x.key !== m.key) })}>
                             <Trash2 />
@@ -501,7 +502,7 @@ export function ShippingView({ zones }: { zones: Zone[] }) {
                   size="sm"
                   variant="outline"
                   leftIcon={<Plus />}
-                  onClick={() => setZone(z.key, { methods: [...z.methods, { key: tmp(), name: { en: "Standard delivery", ar: "توصيل عادي" }, description: {}, type: "FLAT", cost: 0, freeOver: null, perKg: null, minDays: 1, maxDays: 3, isActive: true }] })}
+                  onClick={() => setZone(z.key, { methods: [...z.methods, { key: tmp(), name: { en: "Standard delivery", ar: "توصيل عادي" }, description: {}, type: "FLAT", cost: 0, freeOver: null, perKg: null, minDays: 1, maxDays: 3, isActive: true, limitToRegions: false }] })}
                 >
                   {t("s.addMethod")}
                 </Button>

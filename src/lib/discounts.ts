@@ -30,6 +30,9 @@ export type CouponRule = {
   startsAt: Date | null;
   endsAt: Date | null;
   isActive: boolean;
+  /** Targeting (empty = everywhere): ISO countries and/or city (region) ids. */
+  countries?: string[];
+  regionIds?: string[];
 };
 
 export type CouponContext = {
@@ -37,6 +40,9 @@ export type CouponContext = {
   customerOrderCount: number;
   customerUsageCount: number;
   now?: Date;
+  /** Delivery destination, when known (cart: visitor's country; checkout: chosen address). */
+  country?: string | null;
+  regionId?: string | null;
 };
 
 export type CouponEvaluation =
@@ -53,7 +59,8 @@ export type CouponRejection =
   | "email_not_allowed"
   | "min_subtotal"
   | "no_eligible_items"
-  | "login_required";
+  | "login_required"
+  | "not_available_here";
 
 export function lineEligible(rule: CouponRule, line: DiscountLine) {
   if (rule.excludeSaleItems && line.onSale) return false;
@@ -75,6 +82,13 @@ export function evaluateCoupon(rule: CouponRule, lines: DiscountLine[], ctx: Cou
   if (rule.startsAt && now < rule.startsAt) return { ok: false, reason: "not_started" };
   if (rule.endsAt && now >= rule.endsAt) return { ok: false, reason: "expired" };
   if (rule.usageLimit != null && rule.usedCount >= rule.usageLimit) return { ok: false, reason: "usage_limit" };
+  // Country / city targeting: offers limited to certain places apply only there
+  // (either list matching is enough — e.g. "all of the UAE, or Riyadh").
+  if (rule.countries?.length || rule.regionIds?.length) {
+    const inCountry = Boolean(ctx.country && rule.countries?.includes(ctx.country.toUpperCase()));
+    const inCity = Boolean(ctx.regionId && rule.regionIds?.includes(ctx.regionId));
+    if (!inCountry && !inCity) return { ok: false, reason: "not_available_here" };
+  }
   if ((rule.usageLimitPerCustomer != null || rule.firstOrderOnly || rule.allowedEmails.length) && !ctx.email)
     return { ok: false, reason: "login_required" };
   if (rule.usageLimitPerCustomer != null && ctx.customerUsageCount >= rule.usageLimitPerCustomer) return { ok: false, reason: "customer_limit" };

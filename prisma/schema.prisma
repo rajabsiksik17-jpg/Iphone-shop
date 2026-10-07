@@ -181,6 +181,7 @@ model Address {
   line1      String
   line2      String?
   postalCode String?
+  regionId   String?
   isDefault  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -653,6 +654,9 @@ model Cart {
   guestTokenHash String?    @unique
   couponCode     String?
   usePoints      Int        @default(0)
+  // Destination chosen at checkout (drives country/city-targeted promotions).
+  country        String?    @db.Char(2)
+  regionId       String?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
   items          CartItem[]
@@ -940,6 +944,9 @@ model Coupon {
   endsAt                DateTime?
   isActive              Boolean       @default(true)
   isAutomatic           Boolean       @default(false)
+  // Targeting: empty = everywhere.
+  countries             String[]      @default([])
+  regionIds             String[]      @default([])
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
   redemptions           CouponRedemption[]
@@ -1471,6 +1478,40 @@ model ShippingMethod {
   maxDays     Int?
   isActive    Boolean          @default(true)
   position    Int              @default(0)
+  // Only offered in cities with an enabled per-city rate (e.g. express in main cities).
+  limitToRegions Boolean       @default(false)
+  regionRates ShippingRegionRate[]
+}
+
+/// A city / governorate the store delivers to, optionally grouped (e.g. Saudi administrative regions).
+model Region {
+  id        String               @id @default(cuid())
+  country   String               @db.Char(2)
+  name      Json
+  group     Json                 @default("{}")
+  isActive  Boolean              @default(true)
+  position  Int                  @default(0)
+  createdAt DateTime             @default(now())
+  updatedAt DateTime             @updatedAt
+  rates     ShippingRegionRate[]
+
+  @@index([country, position])
+}
+
+/// Per-city override for a shipping method: availability, price and delivery time.
+model ShippingRegionRate {
+  methodId    String
+  method      ShippingMethod @relation(fields: [methodId], references: [id], onDelete: Cascade)
+  regionId    String
+  region      Region         @relation(fields: [regionId], references: [id], onDelete: Cascade)
+  isAvailable Boolean        @default(true)
+  cost        Int?
+  freeOver    Int?
+  minDays     Int?
+  maxDays     Int?
+
+  @@id([methodId, regionId])
+  @@index([regionId])
 }
 
 // ───────────────────────────── Observability ─────────────────────────────────

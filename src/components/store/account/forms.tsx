@@ -1,5 +1,7 @@
 "use client";
 
+import { Combobox } from "@/components/ui/combobox";
+import { CitySelect, CountrySelect } from "@/components/store/geo-select";
 import { useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { MapPin, Pencil, Trash2, Plus, Star, Download, AlertTriangle, RotateCcw, Bell, CheckCheck } from "lucide-react";
@@ -16,9 +18,9 @@ import { useErrorMessage, useFieldError } from "@/lib/use-action";
 import { cn } from "@/lib/utils";
 import type { FieldErrors } from "@/server/errors";
 
-type Address = { id: string; label: string | null; fullName: string; phone: string; country: string; city: string; area: string | null; line1: string; line2: string | null; postalCode: string | null; isDefault: boolean };
+type Address = { id: string; label: string | null; fullName: string; phone: string; country: string; city: string; regionId: string | null; area: string | null; line1: string; line2: string | null; postalCode: string | null; isDefault: boolean };
 
-export function AddressBook({ addresses, countries, defaultCountry }: { addresses: Address[]; countries: { code: string; name: string }[]; defaultCountry: string }) {
+export function AddressBook({ addresses, countries, regions, defaultCountry }: { addresses: Address[]; countries: { code: string; name: string }[]; regions: Record<string, { id: string; name: string; group: string; alt?: string }[]>; defaultCountry: string }) {
   const t = useTranslations();
   const router = useRouter();
   const errorMessage = useErrorMessage();
@@ -91,6 +93,7 @@ export function AddressBook({ addresses, countries, defaultCountry }: { addresse
                   phone: editing.phone ?? "",
                   country: editing.country ?? defaultCountry,
                   city: editing.city ?? "",
+                  regionId: editing.regionId ?? null,
                   area: editing.area ?? "",
                   line1: editing.line1 ?? "",
                   line2: editing.line2 ?? "",
@@ -113,19 +116,19 @@ export function AddressBook({ addresses, countries, defaultCountry }: { addresse
             <Field label={t("checkout.phone")} error={fieldError(errors.phone)}>
               {(p) => <PhoneInput {...p} value={editing.phone ?? ""} onChange={(v) => setEditing((a) => ({ ...a, phone: v }))} defaultCountry={editing.country} />}
             </Field>
-            <Field label={t("checkout.country")}>
-              {(p) => (
-                <NativeSelect {...p} value={editing.country ?? defaultCountry} onChange={set("country")}>
-                  {countries.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              )}
-            </Field>
+            {countries.length > 1 && (
+              <Field label={t("checkout.country")}>
+                {(p) => <CountrySelect id={p.id} countries={countries} value={editing.country ?? defaultCountry} onChange={(code) => setEditing((a) => ({ ...a, country: code, regionId: null, city: a?.country === code ? a?.city : "" }))} />}
+              </Field>
+            )}
             <Field label={t("checkout.city")} error={fieldError(errors.city)}>
-              {(p) => <Input {...p} value={editing.city ?? ""} onChange={set("city")} />}
+              {(p) =>
+                (regions[editing.country ?? defaultCountry] ?? []).length ? (
+                  <CitySelect id={p.id} invalid={p.invalid} regions={regions[editing.country ?? defaultCountry]} value={editing.regionId ?? null} onChange={(id, name) => setEditing((a) => ({ ...a, regionId: id, city: name }))} />
+                ) : (
+                  <Input {...p} value={editing.city ?? ""} onChange={set("city")} />
+                )
+              }
             </Field>
             <Field label={t("checkout.address")} error={fieldError(errors.line1)} className="sm:col-span-2">
               {(p) => <Input {...p} value={editing.line1 ?? ""} onChange={set("line1")} />}
@@ -178,10 +181,17 @@ export function ProfileForm({ user }: { user: { name: string; email: string; pho
       </Field>
       <Field label={t("account.language")}>
         {(p) => (
-          <NativeSelect {...p} value={v.locale} onChange={(e) => setV({ ...v, locale: e.target.value })}>
-            <option value="ar">العربية</option>
-            <option value="en">English</option>
-          </NativeSelect>
+          <Combobox
+            id={p.id}
+            label={t("account.language")}
+            searchable={false}
+            options={[
+              { value: "ar", label: "العربية", keywords: "Arabic" },
+              { value: "en", label: "English", keywords: "انجليزي" },
+            ]}
+            value={v.locale}
+            onChange={(locale) => setV({ ...v, locale })}
+          />
         )}
       </Field>
       <Checkbox label={t("account.marketing")} checked={v.marketing} onChange={(e) => setV({ ...v, marketing: e.target.checked })} />

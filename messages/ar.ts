@@ -2,6 +2,7 @@ import type { Messages } from "./en";
 
 const ar: Messages = {
   common: {
+    noMatches: "لا توجد نتائج",
     breadcrumb: "مسار التنقل",
     home: "الرئيسية",
     shop: "المتجر",
@@ -283,9 +284,12 @@ const ar: Messages = {
       min_subtotal: "قيمة طلبك أقل من الحد الأدنى لهذا الرمز.",
       no_eligible_items: "لا توجد منتجات في سلتك مؤهلة لهذا الرمز.",
       login_required: "سجّل الدخول لاستخدام هذا الرمز.",
+      not_available_here: "هذا العرض غير متاح لعنوان التوصيل المحدد.",
     },
   },
   checkout: {
+    chooseCity: "اختر المدينة",
+    phoneCountry: "رمز الدولة",
     title: "إتمام الشراء",
     contact: "بيانات التواصل",
     email: "البريد الإلكتروني",

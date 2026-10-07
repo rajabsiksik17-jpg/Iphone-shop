@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { getCountries } from "libphonenumber-js";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
 import { db } from "@/server/db";
@@ -8,8 +7,9 @@ import { availablePaymentMethods } from "@/server/commerce/checkout";
 import { getCurrentUser } from "@/server/auth/session";
 import { getManySettings } from "@/server/settings/service";
 import { requestMeta } from "@/server/request";
+import { checkoutDestinations } from "@/server/commerce/regions";
 import { CheckoutForm } from "@/components/store/checkout/checkout-form";
-import { localeMeta, type Locale } from "@/i18n/config";
+import type { Locale } from "@/i18n/config";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +28,8 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
   const t = await getTranslations("checkout");
   const addresses = user ? await db.address.findMany({ where: { userId: user.id }, orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }] }) : [];
   const payments = await availablePaymentMethods(locale, totals.total);
-  const names = new Intl.DisplayNames([localeMeta[locale].intl], { type: "region" });
-  const allowed = settings.checkout.allowedCountries;
-  const countries = (allowed.length ? allowed : getCountries())
-    .map((code) => ({ code, name: names.of(code) ?? code }))
-    .sort((a, b) => a.name.localeCompare(b.name, locale));
+  // Shipping countries + their cities (Settings → Countries & cities).
+  const { countries, regions } = await checkoutDestinations(locale);
   const detected = settings.geo.detectFromHeaders ? meta.country : null;
 
   return (
@@ -44,6 +41,7 @@ export default async function CheckoutPage({ params, searchParams }: { params: P
         addresses={addresses.map((a) => ({ ...a, createdAt: undefined, updatedAt: undefined })) as never}
         payments={payments}
         countries={countries}
+        regions={regions}
         defaultCountry={(detected && countries.some((c) => c.code === detected) ? detected : settings.geo.defaultCountry).toUpperCase()}
         settings={{ requireTerms: settings.checkout.requireTerms, allowNotes: settings.checkout.allowOrderNotes, postalCode: settings.checkout.postalCode, guestCheckout: settings.checkout.guestCheckout }}
         cancelledOrder={(await searchParams).cancelled ?? null}

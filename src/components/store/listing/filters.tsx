@@ -1,5 +1,6 @@
 "use client";
 
+import { Combobox } from "@/components/ui/combobox";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -305,21 +306,21 @@ export function SortSelect({ options, current }: { options: SortKey[]; current: 
   const t = useTranslations("listing");
   const { update } = useListingParams();
   return (
-    <label className="relative flex items-center gap-2 text-sm">
-      <span className="text-muted max-sm:sr-only">{t("sortBy")}</span>
-      <select
-        value={current}
-        onChange={(e) => update((p) => p.set("sort", e.target.value))}
-        className="h-10 appearance-none rounded-full border border-border bg-bg pe-9 ps-4 text-sm font-medium outline-none transition hover:border-fg/30 focus:border-accent"
-      >
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {t(`sorts.${o}`)}
-          </option>
-        ))}
-      </select>
-      <ChevronDown className="pointer-events-none absolute end-3 size-4 text-muted" />
-    </label>
+    <Combobox
+      label={t("sortBy")}
+      options={options.map((o) => ({ value: o, label: t(`sorts.${o}`) }))}
+      value={current}
+      searchable={false}
+      onChange={(v) => update((p) => p.set("sort", v))}
+      className="flex h-10 items-center gap-2 rounded-full border border-border bg-bg pe-3 ps-4 text-sm font-medium transition hover:border-fg/30"
+      trigger={(sel) => (
+        <span className="flex items-center gap-2">
+          <span className="text-muted max-sm:sr-only">{t("sortBy")}</span>
+          {sel?.label}
+          <ChevronDown className="size-4 text-muted" />
+        </span>
+      )}
+    />
   );
 }
 

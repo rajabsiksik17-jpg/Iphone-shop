@@ -1,20 +1,20 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Check, ChevronDown, Globe, Search } from "lucide-react";
+import { ChevronDown, Globe } from "lucide-react";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/menu";
 import { Flag } from "@/components/ui/flag";
 import { Spinner } from "@/components/ui/spinner";
+import { Combobox, type ComboOption } from "@/components/ui/combobox";
 import { useStore } from "@/components/providers/store-context";
 import { setDisplayCurrencyAction } from "@/actions/cart";
 import { cn } from "@/lib/utils";
 
 const LANGS = [
-  { code: "ar", label: "العربية", flag: "SA" },
-  { code: "en", label: "English", flag: "US" },
+  { code: "ar", label: "العربية", keywords: "Arabic arabi عربي" },
+  { code: "en", label: "English", keywords: "انجليزي إنجليزية انكليزي" },
 ] as const;
 
 /** Switch language keeping the current page and query (the choice is remembered in a cookie). */
@@ -25,31 +25,34 @@ export function useLanguageHref() {
   return `${pathname}${qs ? `?${qs}` : ""}`;
 }
 
+const pill = "flex items-center gap-1.5 rounded-full text-sm transition hover:text-fg";
+
 export function LanguageSelect({ className }: { className?: string }) {
   const t = useTranslations("header");
   const locale = useLocale();
   const href = useLanguageHref();
-  const current = LANGS.find((l) => l.code === locale)!;
+  const router = useRouter();
+  const options = useMemo<ComboOption[]>(() => LANGS.map((l) => ({ value: l.code, label: l.label, keywords: l.keywords })), []);
   return (
-    <Popover>
-      <PopoverTrigger className={cn("flex items-center gap-1.5 rounded-full text-sm transition hover:text-fg", className)} aria-label={t("language")}>
-        <Globe className="size-4" />
-        {current.label}
-        <ChevronDown className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-44 p-1.5">
-        {LANGS.map((l) => (
-          <Link key={l.code} href={href} locale={l.code} hrefLang={l.code} lang={l.code} className={cn("flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition hover:bg-surface", l.code === locale && "font-semibold")}>
-            {l.label}
-            {l.code === locale && <Check className="ms-auto size-4 text-accent" />}
-          </Link>
-        ))}
-      </PopoverContent>
-    </Popover>
+    <Combobox
+      label={t("language")}
+      options={options}
+      value={locale}
+      searchable={false}
+      onChange={(code) => code !== locale && router.replace(href, { locale: code })}
+      className={cn(pill, className)}
+      trigger={(sel) => (
+        <span className="flex items-center gap-1.5">
+          <Globe className="size-4" />
+          {sel?.label}
+          <ChevronDown className="size-3.5" />
+        </span>
+      )}
+    />
   );
 }
 
-/** Inline list for the mobile drawer. */
+/** Inline two-way switch for the mobile drawer. */
 export function LanguageList() {
   const locale = useLocale();
   const href = useLanguageHref();
@@ -64,103 +67,53 @@ export function LanguageList() {
   );
 }
 
-function useCurrencySwitch() {
+/** Currency options: flag, code, local name and symbol; searchable by any of them. */
+function useCurrencyOptions(): { options: ComboOption[]; current: string; choose: (code: string) => void; pending: boolean } {
   const { currencies, money } = useStore();
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [target, setTarget] = useState<string | null>(null);
+  const options = useMemo<ComboOption[]>(() => currencies.map((c) => ({ value: c.code, label: `${c.code} · ${c.name}`, hint: c.symbol, icon: <Flag code={c.flag} />, keywords: c.name })), [currencies]);
   const choose = (code: string) => {
     if (code === money.display.code) return;
-    setTarget(code);
     start(async () => {
       await setDisplayCurrencyAction(code);
       router.refresh();
     });
   };
-  return { currencies, current: money.display.code, choose, pending, target };
+  return { options, current: money.display.code, choose, pending };
 }
 
-function CurrencyRows({ onPick, dense }: { onPick?: () => void; dense?: boolean }) {
-  const t = useTranslations("header");
-  const { currencies, current, choose, pending, target } = useCurrencySwitch();
-  const [q, setQ] = useState("");
-  const list = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return needle ? currencies.filter((c) => `${c.code} ${c.name}`.toLowerCase().includes(needle)) : currencies;
-  }, [currencies, q]);
-  return (
-    <div>
-      {currencies.length > 8 && (
-        <div className="relative mb-1.5">
-          <Search className="pointer-events-none absolute start-3 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("searchCurrency")} aria-label={t("searchCurrency")} className="h-9 w-full rounded-lg border border-border bg-bg pe-3 ps-8 text-sm outline-none focus:border-accent" />
-        </div>
-      )}
-      <ul className={cn("overflow-y-auto", dense ? "max-h-72" : "")}>
-        {list.map((c) => (
-          <li key={c.code}>
-            <button
-              type="button"
-              onClick={() => (choose(c.code), onPick?.())}
-              className={cn("flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-start text-sm transition hover:bg-surface", c.code === current && "bg-surface")}
-            >
-              <Flag code={c.flag} />
-              <span className="w-10 font-semibold tabular">{c.code}</span>
-              <span className="min-w-0 flex-1 truncate text-muted">{c.name}</span>
-              <span className="text-xs text-muted">{c.symbol}</span>
-              {pending && target === c.code ? <Spinner className="size-4" /> : c.code === current ? <Check className="size-4 text-accent" /> : null}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-/** Header dropdown: flag + code; searchable list of currencies. */
+/** Header currency dropdown (flag + code). */
 export function CurrencySelect({ className }: { className?: string }) {
   const t = useTranslations("header");
-  const { currencies, money } = useStore();
-  const [open, setOpen] = useState(false);
+  const { currencies } = useStore();
+  const { options, current, choose, pending } = useCurrencyOptions();
   if (currencies.length < 2) return null;
-  const current = currencies.find((c) => c.code === money.display.code);
+  const flag = currencies.find((c) => c.code === current)?.flag;
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger className={cn("flex items-center gap-1.5 rounded-full text-sm transition hover:text-fg", className)} aria-label={t("currency", { code: money.display.code })}>
-        <Flag code={current?.flag} />
-        <span className="font-medium tabular">{money.display.code}</span>
-        <ChevronDown className="size-3.5" />
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-2">
-        <CurrencyRows dense onPick={() => setOpen(false)} />
-      </PopoverContent>
-    </Popover>
+    <Combobox
+      label={t("currency", { code: current })}
+      options={options}
+      value={current}
+      onChange={choose}
+      searchable={currencies.length > 6}
+      className={cn(pill, className)}
+      trigger={() => (
+        <span className="flex items-center gap-1.5">
+          {pending ? <Spinner className="size-4" /> : <Flag code={flag} />}
+          <span className="font-medium tabular">{current}</span>
+          <ChevronDown className="size-3.5" />
+        </span>
+      )}
+    />
   );
 }
 
-/**
- * Mobile drawer: a compact dropdown — the current currency on one row; tapping
- * it expands the searchable list in place (no overlay on top of the drawer).
- */
+/** Mobile drawer: one field-style row that opens the searchable list as a sheet. */
 export function CurrencyList() {
   const t = useTranslations("header");
-  const { currencies, money } = useStore();
-  const [open, setOpen] = useState(false);
+  const { currencies } = useStore();
+  const { options, current, choose } = useCurrencyOptions();
   if (currencies.length < 2) return null;
-  const current = currencies.find((c) => c.code === money.display.code);
-  return (
-    <div className="rounded-xl border border-border">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={t("currency", { code: money.display.code })} className="flex w-full items-center gap-3 px-3 py-2.5 text-start text-sm">
-        <Flag code={current?.flag} />
-        <span className="font-semibold tabular">{money.display.code}</span>
-        <span className="min-w-0 flex-1 truncate text-muted">{current?.name}</span>
-        <ChevronDown className={cn("size-4 text-muted transition", open && "rotate-180")} />
-      </button>
-      {open && (
-        <div className="border-t border-border p-1.5">
-          <CurrencyRows dense onPick={() => setOpen(false)} />
-        </div>
-      )}
-    </div>
-  );
+  return <Combobox label={t("currency", { code: current })} options={options} value={current} onChange={choose} searchable={currencies.length > 6} />;
 }

@@ -26,6 +26,7 @@ import { ABOUT, ANNOUNCEMENTS, FAQS, FAQ_CATEGORIES, LEGAL_PAGES, SOCIAL_PLATFOR
 import { CURRENCY_CATALOG } from "../src/config/currencies";
 import { BANK_INSTRUCTIONS } from "../scripts/content-pairs";
 import { buildDefaultNavigation, NAV_VERSION } from "../src/server/setup/navigation";
+import { setupSaudiRegions } from "../src/server/setup/regions";
 import { brandLogo, categoryArt, productArt, slideArt, bannerArt, type DeviceKind } from "./seed/art";
 
 const L = (en: string, ar: string) => ({ en, ar });
@@ -447,6 +448,8 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
   await db.shippingMethod.create({ data: { zoneId: gcc.id, name: L("GCC express", "شحن خليجي سريع"), type: "WEIGHT", cost: SAR(69), perKg: SAR(15), minDays: 3, maxDays: 6 } });
   const world = await db.shippingZone.create({ data: { name: "Rest of world", countries: [], position: 2 } });
   await db.shippingMethod.create({ data: { zoneId: world.id, name: L("International", "شحن دولي"), type: "WEIGHT", cost: SAR(119), perKg: SAR(25), minDays: 5, maxDays: 12 } });
+
+  await setupSaudiRegions();
 
   // Coupons & promotions
   await db.coupon.createMany({

@@ -41,6 +41,13 @@ export async function findCart() {
   return db.cart.findUnique({ where: { guestTokenHash: hmac(token, "cart") }, include: cartInclude });
 }
 
+/** Remember the checkout destination on the cart (country/city-targeted promotions use it). */
+export async function setCartDestination(country: string | null, regionId: string | null) {
+  const cart = await findCart();
+  if (!cart || (cart.country === country && cart.regionId === regionId)) return;
+  await db.cart.update({ where: { id: cart.id }, data: { country, regionId } });
+}
+
 /** Get or create the cart. Only callable from server actions/route handlers (sets cookies). */
 async function ensureCart() {
   const user = await getCurrentUser();
@@ -198,7 +205,7 @@ type CartWithItems = NonNullable<Awaited<ReturnType<typeof findCart>>>;
  * promotions, points and tax are all resolved here on the server — the client
  * never supplies amounts.
  */
-export async function computeCart(cart: CartWithItems | null, locale: string, ctx: { email?: string | null; userId?: string | null; country?: string } = {}): Promise<CartTotals> {
+export async function computeCart(cart: CartWithItems | null, locale: string, ctx: { email?: string | null; userId?: string | null; country?: string; regionId?: string | null } = {}): Promise<CartTotals> {
   const [store, loyalty, tax] = await Promise.all([getSettings("store"), getSettings("loyalty"), getSettings("tax")]);
   const now = new Date();
   const lines: CartLineDTO[] = (cart?.items ?? []).map((item) => {
@@ -277,7 +284,7 @@ export async function computeCart(cart: CartWithItems | null, locale: string, ct
   const ordered = [...coupons.filter((c) => c.isAutomatic), ...coupons.filter((c) => !c.isAutomatic)];
   for (const c of ordered) {
     const usage = email ? await db.couponRedemption.count({ where: { couponId: c.id, email } }) : 0;
-    const result = evaluateCoupon({ ...c, type: c.type, scope: c.scope }, discountLines, { email, customerOrderCount: orderCount, customerUsageCount: usage, now });
+    const result = evaluateCoupon({ ...c, type: c.type, scope: c.scope }, discountLines, { email, customerOrderCount: orderCount, customerUsageCount: usage, now, country: ctx.country ?? cart?.country ?? store.defaultCountry, regionId: ctx.regionId ?? cart?.regionId ?? null });
     if (!c.isAutomatic) couponState = { code: c.code!, valid: result.ok, reason: result.ok ? undefined : result.reason, freeShipping: result.ok && result.freeShipping };
     if (!result.ok) continue;
     if (result.freeShipping) freeShipping = true;

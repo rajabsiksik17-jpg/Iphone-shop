@@ -1,5 +1,6 @@
 const en = {
   common: {
+    noMatches: "No matches",
     breadcrumb: "Breadcrumb",
     home: "Home",
     shop: "Shop",
@@ -281,9 +282,12 @@ const en = {
       min_subtotal: "Your order doesn't meet the minimum for this code.",
       no_eligible_items: "No items in your cart qualify for this code.",
       login_required: "Sign in to use this code.",
+      not_available_here: "This offer isn't available for your delivery address.",
     },
   },
   checkout: {
+    chooseCity: "Choose your city",
+    phoneCountry: "Country code",
     title: "Checkout",
     contact: "Contact",
     email: "Email",

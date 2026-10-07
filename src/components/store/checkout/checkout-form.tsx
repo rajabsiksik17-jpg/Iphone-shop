@@ -9,6 +9,7 @@ import { legalLinkTags } from "@/components/store/legal-links";
 import { Button } from "@/components/ui/button";
 import { Field, Input, NativeSelect, Textarea, Checkbox } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { CitySelect, CountryFlag, CountrySelect } from "@/components/store/geo-select";
 import { Spinner } from "@/components/ui/spinner";
 import { useStore } from "@/components/providers/store-context";
 import { useCart } from "@/components/store/cart-provider";
@@ -22,7 +23,7 @@ import type { CartTotals } from "@/server/commerce/cart";
 import type { ShippingQuote } from "@/server/commerce/shipping";
 import type { FieldErrors } from "@/server/errors";
 
-type Address = { id: string; label: string | null; fullName: string; phone: string; country: string; city: string; area: string | null; line1: string; line2: string | null; postalCode: string | null; isDefault: boolean };
+type Address = { id: string; label: string | null; fullName: string; phone: string; country: string; city: string; regionId: string | null; area: string | null; line1: string; line2: string | null; postalCode: string | null; isDefault: boolean };
 type PaymentMethod = { key: string; title: string; instructions: string; icon: string; online: boolean; testMode: boolean };
 
 type Props = {
@@ -31,6 +32,8 @@ type Props = {
   addresses: Address[];
   payments: PaymentMethod[];
   countries: { code: string; name: string }[];
+  /** Cities / governorates per country (only for countries that have a list). */
+  regions: Record<string, { id: string; name: string; group: string; alt?: string }[]>;
   defaultCountry: string;
   settings: { requireTerms: boolean; allowNotes: boolean; postalCode: "hidden" | "optional" | "required"; guestCheckout: boolean };
   cancelledOrder: string | null;
@@ -56,13 +59,13 @@ function SectionCard({ step, title, children, aside }: { step: number; title: st
   );
 }
 
-export function CheckoutForm({ initialTotals, user, addresses, payments, countries, defaultCountry, settings, cancelledOrder }: Props) {
+export function CheckoutForm({ initialTotals, user, addresses, payments, countries, regions, defaultCountry, settings, cancelledOrder }: Props) {
   const t = useTranslations();
   const locale = useLocale();
   const errorMessage = useErrorMessage();
   const fieldError = useFieldError();
   const { format, setCartCount } = useStore();
-  const { totals: live, refresh } = useCart();
+  const { totals: live, refresh, replace } = useCart();
   const totals = live ?? initialTotals;
 
   const def = addresses.find((a) => a.isDefault) ?? addresses[0];
@@ -73,6 +76,7 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
     phone: def?.phone ?? user?.phone ?? "",
     country: def?.country ?? defaultCountry,
     city: def?.city ?? "",
+    regionId: def?.regionId ?? (null as string | null),
     area: def?.area ?? "",
     line1: def?.line1 ?? "",
     line2: def?.line2 ?? "",
@@ -104,16 +108,18 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
   }, []);
 
   // Re-quote shipping whenever the destination or cart value changes.
-  const quoteKey = `${form.country}:${totals.subtotal}:${totals.discountTotal}:${totals.freeShipping}`;
+  const quoteKey = `${form.country}:${form.regionId}:${totals.subtotal}:${totals.discountTotal}:${totals.freeShipping}`;
   useEffect(() => {
     let cancelled = false;
     setLoadingQuotes(true);
-    shippingQuotesAction({ country: form.country, locale }).then((r) => {
+    shippingQuotesAction({ country: form.country, regionId: form.regionId, locale }).then((r) => {
       if (cancelled) return;
       setLoadingQuotes(false);
       if (!r.ok) return;
-      setQuotes(r.data);
-      setShippingId((cur) => (cur && r.data.some((q) => q.id === cur) ? cur : (r.data[0]?.id ?? null)));
+      setQuotes(r.data.quotes);
+      // Totals reflect the destination (country/city-targeted offers).
+      if (r.data.totals.discountTotal !== totals.discountTotal || r.data.totals.freeShipping !== totals.freeShipping) replace(r.data.totals);
+      setShippingId((cur) => (cur && r.data.quotes.some((q) => q.id === cur) ? cur : (r.data.quotes[0]?.id ?? null)));
     });
     return () => {
       cancelled = true;
@@ -122,6 +128,7 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
   }, [quoteKey, locale]);
 
   const shipping = quotes?.find((q) => q.id === shippingId) ?? null;
+  const cityOptions = regions[form.country] ?? [];
   const grand = totals.total + (shipping?.cost ?? 0);
   const selectedPayment = payments.find((p) => p.key === payment);
 
@@ -131,7 +138,7 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
   const chooseAddress = (id: string) => {
     setAddressId(id);
     const a = addresses.find((x) => x.id === id);
-    if (a) setForm((f) => ({ ...f, fullName: a.fullName, phone: a.phone, country: a.country, city: a.city, area: a.area ?? "", line1: a.line1, line2: a.line2 ?? "", postalCode: a.postalCode ?? "" }));
+    if (a) setForm((f) => ({ ...f, fullName: a.fullName, phone: a.phone, country: a.country, city: a.city, regionId: a.regionId ?? null, area: a.area ?? "", line1: a.line1, line2: a.line2 ?? "", postalCode: a.postalCode ?? "" }));
   };
 
   const submit = () => {
@@ -140,7 +147,7 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
       const res = await placeOrderAction(
         {
           email: form.email,
-          address: { fullName: form.fullName, phone: form.phone, country: form.country, city: form.city, area: form.area, line1: form.line1, line2: form.line2, postalCode: form.postalCode },
+          address: { fullName: form.fullName, phone: form.phone, country: form.country, city: form.city, regionId: form.regionId, area: form.area, line1: form.line1, line2: form.line2, postalCode: form.postalCode },
           shippingMethodId: shippingId ?? "",
           paymentMethod: payment,
           customerNote: notes,
@@ -236,19 +243,29 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
             <Field label={t("checkout.phone")} error={err("phone")}>
               {(p) => <PhoneInput {...p} value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} defaultCountry={form.country} required />}
             </Field>
-            <Field label={t("checkout.country")} error={err("country")}>
-              {(p) => (
-                <NativeSelect {...p} value={form.country} onChange={set("country")} autoComplete="country">
-                  {countries.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.name}
-                    </option>
-                  ))}
-                </NativeSelect>
-              )}
-            </Field>
+            {/* One shipping country: no picker — it's shown, and only the city is chosen. */}
+            {countries.length > 1 ? (
+              <Field label={t("checkout.country")} error={err("country")}>
+                {(p) => <CountrySelect id={p.id} invalid={p.invalid} countries={countries} value={form.country} onChange={(code) => setForm((f) => ({ ...f, country: code, regionId: null, city: f.country === code ? f.city : "" }))} />}
+              </Field>
+            ) : (
+              <Field label={t("checkout.country")}>
+                {() => (
+                  <div className="flex h-12 items-center gap-2.5 rounded-xl border border-border bg-surface/60 px-3.5 text-[15px]">
+                    <CountryFlag code={form.country} />
+                    {countries[0]?.name ?? form.country}
+                  </div>
+                )}
+              </Field>
+            )}
             <Field label={t("checkout.city")} error={err("city")}>
-              {(p) => <Input {...p} autoComplete="address-level2" value={form.city} onChange={set("city")} required />}
+              {(p) =>
+                cityOptions.length ? (
+                  <CitySelect id={p.id} invalid={p.invalid} regions={cityOptions} value={form.regionId} onChange={(id, name) => setForm((f) => ({ ...f, regionId: id, city: name }))} />
+                ) : (
+                  <Input {...p} autoComplete="address-level2" value={form.city} onChange={set("city")} required />
+                )
+              }
             </Field>
             <Field label={t("checkout.address")} error={err("line1")} className="sm:col-span-2">
               {(p) => <Input {...p} autoComplete="address-line1" value={form.line1} onChange={set("line1")} required />}

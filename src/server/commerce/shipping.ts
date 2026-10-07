@@ -41,11 +41,24 @@ export async function zoneForCountry(country: string) {
   return zones.find((z) => z.countries.includes(country.toUpperCase())) ?? zones.find((z) => z.countries.length === 0) ?? null;
 }
 
-export async function quoteShipping(opts: { country: string; subtotal: number; weightGrams: number; freeShipping: boolean; requiresShipping: boolean; locale: string }): Promise<ShippingQuote[]> {
+/**
+ * Delivery options for a destination. A city (region) can override each
+ * method: hide it, or change its price, free-delivery threshold and delivery
+ * time. Methods marked "limitToRegions" are offered only in cities where they
+ * are explicitly enabled.
+ */
+export async function quoteShipping(opts: { country: string; regionId?: string | null; subtotal: number; weightGrams: number; freeShipping: boolean; requiresShipping: boolean; locale: string }): Promise<ShippingQuote[]> {
   const zone = await zoneForCountry(opts.country);
   if (!zone) return [];
+  const rates = opts.regionId ? await db.shippingRegionRate.findMany({ where: { regionId: opts.regionId, methodId: { in: zone.methods.map((m) => m.id) } } }) : [];
   return zone.methods
     .filter((m) => opts.requiresShipping || m.type === "PICKUP" || m.type === "FREE")
+    .flatMap((base) => {
+      const o = rates.find((r) => r.methodId === base.id);
+      if (o && !o.isAvailable) return [];
+      if (base.limitToRegions && !o) return [];
+      return [{ ...base, cost: o?.cost ?? base.cost, freeOver: o?.freeOver ?? base.freeOver, minDays: o?.minDays ?? base.minDays, maxDays: o?.maxDays ?? base.maxDays }];
+    })
     .map((m) => {
       const r = rateFor(m, opts.subtotal, opts.weightGrams, opts.freeShipping);
       return {

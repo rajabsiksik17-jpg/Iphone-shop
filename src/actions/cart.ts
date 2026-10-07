@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { cookies } from "next/headers";
-import { addToCart, getCartTotals, removeCartItem, setCartCoupon, setCartPoints, updateCartItem } from "@/server/commerce/cart";
+import { addToCart, getCartTotals, removeCartItem, setCartCoupon, setCartDestination, setCartPoints, updateCartItem } from "@/server/commerce/cart";
 import { quoteShipping } from "@/server/commerce/shipping";
 import { limitBy } from "@/server/rate-limit";
 import { requestMeta } from "@/server/request";
@@ -66,18 +66,26 @@ export async function usePointsAction(input: { points: number; locale: string })
   });
 }
 
-export async function shippingQuotesAction(input: { country: string; locale: string }) {
+/**
+ * Delivery options for the chosen destination. Also stores the destination on
+ * the cart and returns fresh totals, so country/city-targeted offers apply (or
+ * drop) in the same round trip.
+ */
+export async function shippingQuotesAction(input: { country: string; regionId?: string | null; locale: string }) {
   return run(async () => {
-    const p = z.object({ country: z.string().length(2), locale: localeSchema }).parse(input);
+    const p = z.object({ country: z.string().length(2), regionId: z.string().max(64).nullable().optional(), locale: localeSchema }).parse(input);
+    await setCartDestination(p.country.toUpperCase(), p.regionId ?? null);
     const totals = await getCartTotals(p.locale);
-    return quoteShipping({
+    const quotes = await quoteShipping({
       country: p.country,
+      regionId: p.regionId ?? null,
       subtotal: totals.subtotal - totals.discountTotal,
       weightGrams: totals.weightGrams,
       freeShipping: totals.freeShipping,
       requiresShipping: totals.requiresShipping,
       locale: p.locale,
     });
+    return { quotes, totals };
   });
 }
 

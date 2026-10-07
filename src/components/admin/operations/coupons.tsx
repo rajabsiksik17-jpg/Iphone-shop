@@ -15,6 +15,10 @@ import { saveCouponAction, deleteCouponAction, bulkCouponsAction } from "@/actio
 import { BulkActions } from "../bulk-actions";
 import { fmtDate } from "@/lib/time";
 import type { couponList } from "@/server/admin/operations";
+import { Combobox } from "@/components/ui/combobox";
+import { CountryFlag } from "@/components/store/geo-select";
+import { CountryChips } from "../settings/regions";
+import { MapPin, X } from "lucide-react";
 
 type Data = Awaited<ReturnType<typeof couponList>>;
 type Row = Data["rows"][number];
@@ -42,6 +46,8 @@ const blank = (): Form => ({
   endsAt: null,
   isActive: true,
   isAutomatic: false,
+  countries: [],
+  regionIds: [],
 });
 
 const STATE_TONE = { active: "green", scheduled: "blue", expired: "neutral", exhausted: "amber", inactive: "neutral" } as const;
@@ -181,6 +187,7 @@ export function CouponsView({ data }: { data: Data }) {
             },
             { key: "v", header: t("cp.value"), cell: (r) => <span className="font-medium">{valueText(r)}</span> },
             { key: "s", header: t("cp.scope"), cell: (r) => <span className="text-ad-muted">{t(`cp.scope.${r.scope}`)}</span> },
+            { key: "g", header: locale === "ar" ? "المكان" : "Where", cell: (r) => <Where row={r} /> },
             { key: "u", header: locale === "ar" ? "الاستخدام" : "Usage", cell: (r) => <span className="tabular text-ad-muted">{r.usedCount}{r.usageLimit ? ` / ${r.usageLimit}` : ""}</span> },
             { key: "d", header: t("cp.ends"), cell: (r) => <span className="text-ad-muted">{r.endsAt ? fmtDate(r.endsAt, locale) : "—"}</span> },
             { key: "st", header: t("c.status"), cell: (r) => <Pill tone={STATE_TONE[r.state as keyof typeof STATE_TONE]}>{stateLabel(r.state)}</Pill> },
@@ -314,6 +321,21 @@ export function CouponsView({ data }: { data: Data }) {
             <FieldError message={errText("targetIds")} />
             <Switch checked={f.excludeSaleItems} onCheckedChange={(v) => set("excludeSaleItems", v)} label={t("cp.excludeSale")} />
 
+            <SectionTitle>{locale === "ar" ? "الدول والمدن" : "Countries & cities"}</SectionTitle>
+            <p className="-mt-2 text-xs text-ad-muted">
+              {locale === "ar" ? "اتركها فارغة ليُطبّق العرض في كل مكان. حدد دولًا أو مدنًا ليقتصر عليها فقط (حسب عنوان الشحن)." : "Leave empty to apply everywhere. Pick countries or cities to limit the offer to them (based on the shipping address)."}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label optional>{locale === "ar" ? "الدول" : "Countries"}</Label>
+                <CountryChips value={f.countries} onChange={(v) => set("countries", v)} all={data.countries} label={locale === "ar" ? "أضف دولة…" : "Add a country…"} />
+              </div>
+              <div>
+                <Label optional>{locale === "ar" ? "المدن / المحافظات" : "Cities / governorates"}</Label>
+                <RegionChips value={f.regionIds} onChange={(v) => set("regionIds", v)} regions={data.regions} countries={data.countries} />
+              </div>
+            </div>
+
             <SectionTitle>{locale === "ar" ? "القيود" : "Restrictions"}</SectionTitle>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
@@ -368,5 +390,57 @@ export function CouponsView({ data }: { data: Data }) {
         }}
       />
     </>
+  );
+}
+
+/** Compact "where" cell: flags of targeted countries and a city count. */
+function Where({ row }: { row: Row }) {
+  const { locale } = useAdmin();
+  if (!row.countries.length && !row.regionIds.length) return <span className="text-ad-muted">{locale === "ar" ? "الكل" : "Everywhere"}</span>;
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {row.countries.slice(0, 4).map((c) => (
+        <CountryFlag key={c} code={c} className="h-3 w-4" />
+      ))}
+      {row.countries.length > 4 && <span className="text-xs text-ad-muted">+{row.countries.length - 4}</span>}
+      {row.regionIds.length > 0 && (
+        <Pill tone="blue" className="gap-1">
+          <MapPin className="size-3" />
+          {row.regionIds.length}
+        </Pill>
+      )}
+    </span>
+  );
+}
+
+/** Pick cities (any shipping country), grouped by country; shown as removable chips. */
+function RegionChips({ value, onChange, regions, countries }: { value: string[]; onChange: (v: string[]) => void; regions: Data["regions"]; countries: Data["countries"] }) {
+  const { locale } = useAdmin();
+  const ar = locale === "ar";
+  const options = useMemo(() => {
+    const countryName = (code: string) => countries.find((c) => c.code === code)?.name ?? code;
+    return regions.filter((r) => !value.includes(r.id)).map((r) => ({ value: r.id, label: r.name, hint: r.group || undefined, group: countryName(r.country), icon: <CountryFlag code={r.country} className="h-3 w-4" /> }));
+  }, [regions, value, countries]);
+  if (!regions.length) return <p className="rounded-lg border border-dashed border-ad-border p-3 text-xs text-ad-muted">{ar ? "لا توجد مدن بعد — أضفها من الإعدادات ← الدول والمدن." : "No cities yet — add them in Settings → Countries & cities."}</p>;
+  return (
+    <div className="space-y-2">
+      {value.length > 0 && (
+        <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+          {value.map((id) => {
+            const r = regions.find((x) => x.id === id);
+            return (
+              <span key={id} className="inline-flex items-center gap-1.5 rounded-full border border-ad-border bg-ad-sunken py-1 pe-1 ps-2 text-xs">
+                {r && <CountryFlag code={r.country} className="h-3 w-4" />}
+                {r?.name ?? (ar ? "مدينة محذوفة" : "Deleted city")}
+                <button type="button" onClick={() => onChange(value.filter((x) => x !== id))} className="grid size-5 place-items-center rounded-full hover:bg-ad-hover" aria-label={`${r?.name ?? id} ×`}>
+                  <X className="size-3" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <Combobox label={ar ? "أضف مدينة…" : "Add a city…"} placeholder={ar ? "أضف مدينة…" : "Add a city…"} options={options} value={null} onChange={(id) => onChange([...value, id])} searchable className="h-10 rounded-lg text-sm" />
+    </div>
   );
 }

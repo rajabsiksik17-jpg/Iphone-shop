@@ -199,10 +199,12 @@ export async function adjustPoints(id: string, delta: number, note: string, staf
 // ───────────────────────────────── Coupons ──────────────────────────────────
 
 export async function couponList(locale: string) {
-  const [rows, categories, brands] = await Promise.all([
+  const [rows, categories, brands, dest, regionRows] = await Promise.all([
     db.coupon.findMany({ orderBy: { createdAt: "desc" } }),
     db.category.findMany({ select: { id: true, name: true, path: true, position: true, depth: true } }),
     db.brand.findMany({ select: { id: true, name: true } }),
+    (await import("../commerce/regions")).checkoutDestinations(locale as "ar" | "en"),
+    db.region.findMany({ orderBy: [{ country: "asc" }, { position: "asc" }], select: { id: true, country: true, name: true, group: true } }),
   ]);
   const now = new Date();
   const productIds = [...new Set(rows.filter((c) => c.scope === "PRODUCTS").flatMap((c) => c.targetIds))];
@@ -233,10 +235,15 @@ export async function couponList(locale: string) {
       endsAt: c.endsAt?.toISOString() ?? null,
       isActive: c.isActive,
       isAutomatic: c.isAutomatic,
+      countries: c.countries,
+      regionIds: c.regionIds,
       state: !c.isActive ? "inactive" : c.endsAt && c.endsAt < now ? "expired" : c.startsAt && c.startsAt > now ? "scheduled" : c.usageLimit != null && c.usedCount >= c.usageLimit ? "exhausted" : "active",
     })),
     categories: (await import("./products")).sortTree(categories).map((c) => ({ id: c.id, name: `${"— ".repeat(c.depth)}${t(c.name, locale)}` })),
     brands: brands.map((b) => ({ id: b.id, name: t(b.name, locale) })),
+    // Targeting: shipping countries and every city (inactive ones too, so old targets still show).
+    countries: dest.countries,
+    regions: regionRows.map((r) => ({ id: r.id, country: r.country, name: t(r.name, locale), group: t(r.group, locale) })),
   };
 }
 
@@ -260,6 +267,8 @@ export const couponSchema = z
     endsAt: z.string().datetime().nullable(),
     isActive: z.boolean(),
     isAutomatic: z.boolean(),
+    countries: z.array(z.string().trim().toUpperCase().regex(/^[A-Z]{2}$/)).max(250).default([]),
+    regionIds: z.array(z.string().max(64)).max(1000).default([]),
   })
   .superRefine((c, ctx) => {
     if (!c.isAutomatic && !c.code) ctx.addIssue({ code: "custom", path: ["code"], message: "required" });
