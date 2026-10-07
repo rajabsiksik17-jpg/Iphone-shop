@@ -1,5 +1,6 @@
 "use client";
 
+import { legalLinkTags } from "./legal-links";
 import { useState, useTransition } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSearchParams } from "next/navigation";
@@ -124,18 +125,7 @@ export function RegisterForm({ minPassword }: { minPassword: number }) {
         {t("auth.registerCta")}
       </Button>
       <p className="text-center text-xs text-muted">
-        {t.rich("auth.agree", {
-          terms: () => (
-            <Link href="/terms" className="underline">
-              {t("checkout.termsLink")}
-            </Link>
-          ),
-          privacy: () => (
-            <Link href="/privacy" className="underline">
-              {t("checkout.privacyLink")}
-            </Link>
-          ),
-        })}
+        {t.rich("auth.agree", legalLinkTags())}
       </p>
     </form>
   );

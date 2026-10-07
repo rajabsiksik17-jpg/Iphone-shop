@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import useEmblaCarousel from "embla-carousel-react";
 import { useLocale, useTranslations } from "next-intl";
 import { Expand, X } from "lucide-react";
@@ -34,23 +34,28 @@ export function Gallery({ images, name, activeIndex, badges }: { images: ImageDT
 
   const go = useCallback((i: number) => embla?.scrollTo(i), [embla]);
 
+  // Keep the active thumbnail visible in the rail (without scrolling the page).
+  const railRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const rail = railRef.current;
+    const el = rail?.querySelector<HTMLElement>('[aria-current="true"]');
+    if (!rail || !el) return;
+    const r = rail.getBoundingClientRect();
+    const e = el.getBoundingClientRect();
+    if (e.left < r.left) rail.scrollBy({ left: e.left - r.left - 8, behavior: "smooth" });
+    else if (e.right > r.right) rail.scrollBy({ left: e.right - r.right + 8, behavior: "smooth" });
+    if (e.top < r.top) rail.scrollBy({ top: e.top - r.top - 8, behavior: "smooth" });
+    else if (e.bottom > r.bottom) rail.scrollBy({ top: e.bottom - r.bottom + 8, behavior: "smooth" });
+  }, [index]);
+
   if (!images.length) return <div className="aspect-square rounded-[calc(var(--nq-radius)*1.4)] bg-surface" />;
 
   return (
     <div className="flex flex-col-reverse gap-3 lg:flex-row" aria-label={t("gallery")}>
       {images.length > 1 && (
-        <div className="no-scrollbar flex gap-2 overflow-x-auto lg:max-h-[600px] lg:w-20 lg:flex-col lg:overflow-y-auto">
+        <div ref={railRef} className="no-scrollbar flex gap-2 overflow-x-auto lg:max-h-[600px] lg:w-20 lg:flex-col lg:overflow-y-auto">
           {images.map((img, i) => (
-            <button
-              key={img.url + i}
-              type="button"
-              onClick={() => go(i)}
-              aria-label={`${i + 1} / ${images.length}`}
-              aria-current={i === index}
-              className={cn("relative size-16 shrink-0 overflow-hidden rounded-xl bg-surface ring-offset-2 ring-offset-bg transition lg:size-20", i === index ? "ring-2 ring-fg" : "opacity-70 hover:opacity-100")}
-            >
-              <Picture image={img} sizes="80px" className="size-full" />
-            </button>
+            <Thumb key={img.url + i} image={img} active={i === index} onClick={() => go(i)} label={`${i + 1} / ${images.length}`} className="size-16 rounded-xl lg:size-20" sizes="80px" />
           ))}
         </div>
       )}
@@ -102,16 +107,29 @@ export function Gallery({ images, name, activeIndex, badges }: { images: ImageDT
             <div className="flex-1 overflow-auto">
               <img src={images[index]?.url} alt={images[index]?.alt || name} className="mx-auto max-h-none w-full max-w-5xl object-contain md:w-auto md:max-h-[calc(100dvh-140px)]" />
             </div>
-            <div className="no-scrollbar flex justify-center gap-2 overflow-x-auto p-4">
+            {/* safe center: centred when it fits, scrollable from the start when it doesn't. */}
+            <div className="no-scrollbar flex gap-2 overflow-x-auto p-4 [justify-content:safe_center]">
               {images.map((img, i) => (
-                <button key={i} type="button" onClick={() => (setIndex(i), go(i))} className={cn("size-14 shrink-0 overflow-hidden rounded-lg", i === index ? "ring-2 ring-fg" : "opacity-60")}>
-                  <Picture image={img} sizes="56px" className="size-full" />
-                </button>
+                <Thumb key={i} image={img} active={i === index} onClick={() => (setIndex(i), go(i))} label={`${i + 1} / ${images.length}`} className="size-14 rounded-lg" sizes="56px" />
               ))}
             </div>
           </D.Content>
         </D.Portal>
       </D.Root>
     </div>
+  );
+}
+
+/**
+ * Thumbnail button. The selected state is drawn inside the thumbnail (an
+ * overlaid border with an inner gap) rather than as an outer ring, so a
+ * scrolling rail can never clip it — at any size, edge or direction.
+ */
+function Thumb({ image, active, onClick, label, className, sizes }: { image: ImageDTO; active: boolean; onClick: () => void; label: string; className?: string; sizes: string }) {
+  return (
+    <button type="button" onClick={onClick} aria-label={label} aria-current={active} className={cn("relative shrink-0 overflow-hidden bg-surface transition focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent", active ? "opacity-100" : "opacity-65 hover:opacity-100", className)}>
+      <Picture image={image} sizes={sizes} className="size-full" />
+      <span aria-hidden className={cn("pointer-events-none absolute inset-0 rounded-[inherit] border-2 transition-colors", active ? "border-fg shadow-[inset_0_0_0_2px_var(--color-bg)]" : "border-transparent")} />
+    </button>
   );
 }

@@ -268,6 +268,9 @@ export function DataTable<T extends { id: string }>({
   selected,
   onSelectedChange,
   empty,
+  total,
+  allMatching,
+  onAllMatchingChange,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -278,10 +281,16 @@ export function DataTable<T extends { id: string }>({
   selected?: Set<string>;
   onSelectedChange?: (s: Set<string>) => void;
   empty?: ReactNode;
+  /** Records matching the current filters (all pages) — enables "select all N". */
+  total?: number;
+  allMatching?: boolean;
+  onAllMatchingChange?: (all: boolean) => void;
 }) {
   const router = useRouter();
+  const { t } = useAdmin();
   if (!rows.length) return <>{empty ?? <AdminEmpty />}</>;
   const all = selected && rows.every((r) => selected.has(r.id));
+  const some = Boolean(selected && !all && rows.some((r) => selected.has(r.id)));
   const toggle = (id: string) => {
     if (!selected || !onSelectedChange) return;
     const n = new Set(selected);
@@ -291,13 +300,41 @@ export function DataTable<T extends { id: string }>({
   };
   return (
     <>
+      {selectable && all && total != null && total > rows.length && onAllMatchingChange && (
+        <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 border-b border-ad-border bg-ad-accent/5 px-4 py-2 text-[13px]" role="status">
+          {allMatching ? (
+            <>
+              <span>{t("c.allMatchingSelected", { n: total })}</span>
+              <button type="button" onClick={() => (onAllMatchingChange(false), onSelectedChange?.(new Set()))} className="font-medium text-ad-accent hover:underline">
+                {t("c.clearSelection")}
+              </button>
+            </>
+          ) : (
+            <>
+              <span>{t("c.pageSelected", { n: rows.length })}</span>
+              <button type="button" onClick={() => onAllMatchingChange(true)} className="font-medium text-ad-accent hover:underline">
+                {t("c.selectAllMatching", { n: total })}
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-[13.5px]">
           <thead>
             <tr className="border-b border-ad-border text-start text-xs text-ad-muted">
               {selectable && (
                 <th className="w-10 px-4 py-2.5">
-                  <input type="checkbox" checked={Boolean(all)} onChange={() => onSelectedChange?.(all ? new Set() : new Set(rows.map((r) => r.id)))} className="size-4 accent-[var(--ad-accent)]" aria-label="Select all" />
+                  <input
+                    type="checkbox"
+                    checked={Boolean(all)}
+                    ref={(el) => {
+                      if (el) el.indeterminate = some;
+                    }}
+                    onChange={() => onSelectedChange?.(all ? new Set() : new Set([...(selected ?? []), ...rows.map((r) => r.id)]))}
+                    className="size-4 accent-[var(--ad-accent)]"
+                    aria-label={t("c.selectAll")}
+                  />
                 </th>
               )}
               {columns.map((c) => (
@@ -311,11 +348,22 @@ export function DataTable<T extends { id: string }>({
             {rows.map((r) => (
               <tr
                 key={r.id}
-                onClick={href || onRowClick ? (e) => !(e.target as HTMLElement).closest("a,button,input,label") && (href ? router.push(href(r)) : onRowClick?.(r)) : undefined}
+                onClick={
+                  href || onRowClick
+                    ? (e) => {
+                        const target = e.target as HTMLElement;
+                        // React events bubble through portals: ignore clicks from menus/dialogs opened by a cell,
+                        // and clicks on the row's own interactive controls.
+                        if (!e.currentTarget.contains(target) || target.closest("a,button,input,label,select,[role=menuitem]")) return;
+                        if (href) router.push(href(r));
+                        else onRowClick?.(r);
+                      }
+                    : undefined
+                }
                 className={cn("transition", (href || onRowClick) && "cursor-pointer hover:bg-ad-hover/70", selected?.has(r.id) && "bg-ad-accent/5")}>
                 {selectable && (
                   <td className="px-4 py-3">
-                    <input type="checkbox" checked={Boolean(selected?.has(r.id))} onChange={() => toggle(r.id)} className="size-4 accent-[var(--ad-accent)]" aria-label="Select row" />
+                    <input type="checkbox" checked={Boolean(selected?.has(r.id))} onChange={() => toggle(r.id)} className="size-4 accent-[var(--ad-accent)]" aria-label={t("c.selectRow")} />
                   </td>
                 )}
                 {columns.map((c) => (
@@ -331,15 +379,30 @@ export function DataTable<T extends { id: string }>({
       <ul className="divide-y divide-ad-border md:hidden">
         {rows.map((r) => (
           <li key={r.id} className={cn("flex items-start gap-3 px-4 py-3.5", selected?.has(r.id) && "bg-ad-accent/5")}>
-            {selectable && <input type="checkbox" checked={Boolean(selected?.has(r.id))} onChange={() => toggle(r.id)} className="mt-1 size-4 accent-[var(--ad-accent)]" aria-label="Select row" />}
+            {selectable && <input type="checkbox" checked={Boolean(selected?.has(r.id))} onChange={() => toggle(r.id)} className="mt-1 size-4 accent-[var(--ad-accent)]" aria-label={t("c.selectRow")} />}
             <div className="min-w-0 flex-1">{href ? (
                 <Link href={href(r)} className="block">
                   {mobile(r)}
                 </Link>
               ) : onRowClick ? (
-                <button type="button" onClick={() => onRowClick(r)} className="block w-full text-start">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (!e.currentTarget.contains(target) || target.closest("a,button,input,label,select,[role=menuitem]")) return;
+                    onRowClick(r);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                      e.preventDefault();
+                      onRowClick(r);
+                    }
+                  }}
+                  className="block w-full cursor-pointer rounded-lg text-start focus-visible:outline-2 focus-visible:outline-ad-accent"
+                >
                   {mobile(r)}
-                </button>
+                </div>
               ) : (
                 mobile(r)
               )}</div>

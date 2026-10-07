@@ -6,7 +6,7 @@ import { db } from "@/server/db";
 import { findOrderForShopper } from "@/server/commerce/checkout";
 import { formatBase } from "@/server/commerce/currency";
 import { getCurrentUser } from "@/server/auth/session";
-import { getPaymentProvider } from "@/server/integrations/registry";
+import { paymentMethodTitle, getPaymentProvider } from "@/server/integrations/registry";
 import { Link } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { PurchaseTracker } from "@/components/store/purchase-tracker";
@@ -31,7 +31,7 @@ export default async function OrderConfirmationPage({ params, searchParams }: Pr
   const address = order.shippingAddress as { fullName: string; phone: string; city: string; line1: string; line2?: string; area?: string; country: string };
   const integration = await db.integration.findUnique({ where: { key: order.paymentMethod } });
   const cfg = (integration?.config ?? {}) as Record<string, string>;
-  const methodTitle = cfg[`title_${locale}`] || getPaymentProvider(order.paymentMethod)?.name || order.paymentMethod;
+  const methodTitle = paymentMethodTitle(order.paymentMethod, cfg, locale);
   const instructions = order.paymentStatus !== "PAID" ? cfg[`instructions_${locale}`] || "" : "";
   const failed = sp.payment === "failed" || order.paymentStatus === "FAILED";
   const pending = sp.payment === "pending" || order.paymentStatus === "PENDING";

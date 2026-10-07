@@ -14,6 +14,7 @@ import { SETTINGS_INDEX } from "@/admin/settings-index";
 import { testSmtpAction, testImapAction, sendTestEmailAction } from "@/actions/admin/settings";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 export function SettingsIndex() {
   const { t, can, locale } = useAdmin();
@@ -75,7 +76,7 @@ export function EmailSettings({ initial, secrets, smtpStatus, imapStatus, logs, 
         {s.ok ? <CheckCircle2 className="mt-0.5 size-4 shrink-0" /> : <XCircle className="mt-0.5 size-4 shrink-0" />}
         <span>
           {s.ok ? t("s.connected") : `${errLabel(s.code)} — ${s.message}`}
-          <span className="block text-xs text-ad-muted">{timeAgo(s.at, locale)}</span>
+          <span className="block text-xs text-ad-muted"><TimeAgo date={s.at} /></span>
         </span>
       </p>
     ) : (
@@ -140,7 +141,7 @@ export function EmailSettings({ initial, secrets, smtpStatus, imapStatus, logs, 
                 {l.error && <p className="truncate text-xs text-red-600">{l.error}</p>}
               </div>
               <Pill tone={l.status === "SENT" ? "green" : l.status === "FAILED" ? "red" : "neutral"}>{l.status}</Pill>
-              <span className="shrink-0 text-xs text-ad-muted">{timeAgo(l.createdAt, locale)}</span>
+              <span className="shrink-0 text-xs text-ad-muted"><TimeAgo date={l.createdAt} /></span>
             </li>
           ))}
         </ul>

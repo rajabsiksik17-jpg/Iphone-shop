@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { trustIcons } from "@/components/store/trust-icons";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { getCartTotals } from "@/server/commerce/cart";
 import { CartPageView } from "@/components/store/cart-page";
@@ -19,7 +20,7 @@ export default async function CartPage({ params }: { params: Promise<{ locale: s
   return (
     <div className="container-store py-8 md:py-12">
       <h1 className="mb-8 text-3xl font-semibold tracking-tight md:text-4xl">{t("title")}</h1>
-      <CartPageView initial={totals} />
+      <CartPageView initial={totals} icons={await trustIcons("size-4 shrink-0")} />
     </div>
   );
 }

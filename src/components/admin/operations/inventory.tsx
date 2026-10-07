@@ -13,6 +13,7 @@ import { adjustStockAction } from "@/actions/admin/products";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { inventoryList, recentMovements } from "@/server/admin/operations";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type Data = Awaited<ReturnType<typeof inventoryList>>;
 type Row = Data["rows"][number];
@@ -101,7 +102,7 @@ export function InventoryView({ data, movements }: { data: Data; movements: Awai
                   </span>
                 </div>
                 <p className="text-xs text-ad-muted">
-                  {t(`inv.reason.${m.reason}` as "inv.reason.ORDER")} {m.note ? `· ${m.note}` : ""} · {timeAgo(m.at, locale)}
+                  {t(`inv.reason.${m.reason}` as "inv.reason.ORDER")} {m.note ? `· ${m.note}` : ""} · <TimeAgo date={m.at} />
                   {m.user ? ` · ${m.user}` : ""}
                 </p>
               </li>

@@ -43,6 +43,12 @@ function Thumb({ src, className }: { src: string | null; className?: string }) {
   );
 }
 
+/** Small product count next to a category name (hidden when unknown or zero). */
+function Count({ n }: { n?: number }) {
+  if (!n) return null;
+  return <span className="tabular text-xs text-muted">{n}</span>;
+}
+
 function Badge({ text }: { text: string | null }) {
   if (!text) return null;
   return <span className="rounded-full bg-sale px-1.5 py-px text-[10px] font-bold uppercase leading-4 text-white">{text}</span>;
@@ -143,6 +149,7 @@ function CategoryPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigat
               >
                 <Thumb src={c.image} className="size-9" />
                 <span className="flex-1">{c.label}</span>
+                <Count n={c.count} />
                 {c.children.length > 0 && <ChevronLeft className="size-4 text-muted ltr:rotate-180" />}
               </Link>
             </li>
@@ -163,7 +170,10 @@ function CategoryPanel({ item, onNavigate }: { item: ResolvedMenuItem; onNavigat
               <div key={c.id} className="min-w-0">
                 <Link href={c.href} onClick={onNavigate} className="group flex items-center gap-3">
                   <Thumb src={c.image} className="size-12 transition group-hover:scale-[1.04]" />
-                  <span className="min-w-0 text-[14px] font-semibold leading-snug group-hover:text-accent">{c.label}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[14px] font-semibold leading-snug group-hover:text-accent">{c.label}</span>
+                    {c.count ? <span className="text-xs text-muted">{t("productCount", { count: c.count })}</span> : null}
+                  </span>
                 </Link>
                 {c.children.length > 0 && (
                   <ul className="mt-2 space-y-1 ps-[3.75rem]">
@@ -289,6 +299,7 @@ function DrawerRow({ item, onDrill, onNavigate }: { item: ResolvedMenuItem; onDr
       {item.image !== null || item.kind !== "link" ? <Thumb src={item.image} className="size-10" /> : null}
       <span className={cn("flex-1", item.highlight && "text-sale")}>{item.label}</span>
       <Badge text={item.badge} />
+      <Count n={item.count} />
       <ChevronLeft className="size-5 text-muted ltr:rotate-180" />
     </button>
   ) : (
@@ -546,6 +557,8 @@ export function MobileTabBar() {
   const { cartCount, setCartOpen, wishlist, user } = useStore();
   const item = "relative flex flex-1 flex-col items-center justify-center gap-0.5 text-[10.5px] font-medium transition active:scale-95";
   const active = (p: string) => (p === "/" ? pathname === "/" : pathname.startsWith(p));
+  // Checkout is a focused flow with its own sticky "place order" bar — the tab bar would cover it.
+  if (pathname.startsWith("/checkout")) return null;
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/92 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden" aria-label="Primary">
       <div className="flex h-16">

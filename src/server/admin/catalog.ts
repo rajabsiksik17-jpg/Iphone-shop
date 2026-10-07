@@ -196,6 +196,7 @@ export async function adminAttributes(locale: string) {
       groupId: a.groupId,
       group: a.group ? t(a.group.name, locale) : null,
       isFilterable: a.isFilterable,
+      showOnCard: a.showOnCard,
       isVariantOption: a.isVariantOption,
       isVisible: a.isVisible,
       isHighlighted: a.isHighlighted,
@@ -217,6 +218,7 @@ export const attributeSchema = z.object({
   isVariantOption: z.boolean(),
   isVisible: z.boolean(),
   isHighlighted: z.boolean().default(false),
+  showOnCard: z.boolean().default(false),
   values: z
     .array(z.object({ id: z.string().optional(), slug: z.string().max(60).optional(), label: localized({ required: true, max: 80 }), colorHex: z.union([z.string().regex(/^#[0-9a-f]{6}$/i), z.literal("")]).optional() }))
     .max(300),
@@ -227,7 +229,7 @@ export async function saveAttribute(id: string | null, raw: unknown, staff: Curr
   const key = slugify(p.key || p.name.en || "") || `attr-${Date.now()}`;
   if (await db.attribute.findFirst({ where: { key, ...(id ? { id: { not: id } } : {}) } })) throw Errors.invalid({ key: ["key_taken"] });
   const attrId = await db.$transaction(async (tx) => {
-    const data = { key, name: p.name, type: p.type, unit: p.unit || null, icon: p.icon ?? null, groupId: p.groupId || null, isFilterable: p.isFilterable, isVariantOption: p.isVariantOption, isVisible: p.isVisible, isHighlighted: p.isHighlighted };
+    const data = { key, name: p.name, type: p.type, unit: p.unit || null, icon: p.icon ?? null, groupId: p.groupId || null, isFilterable: p.isFilterable, isVariantOption: p.isVariantOption, isVisible: p.isVisible, isHighlighted: p.isHighlighted, showOnCard: p.showOnCard };
     const a = id ? await tx.attribute.update({ where: { id }, data }) : await tx.attribute.create({ data: { ...data, position: await tx.attribute.count() } });
     const keep = p.values.map((v) => v.id).filter(Boolean) as string[];
     await tx.attributeValue.deleteMany({ where: { attributeId: a.id, id: { notIn: keep } } });

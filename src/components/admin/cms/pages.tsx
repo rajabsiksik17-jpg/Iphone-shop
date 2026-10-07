@@ -10,6 +10,7 @@ import { PageHeader, Panel, DataTable, Pill, ConfirmDialog, AdminEmpty } from ".
 import { deletePageAction, duplicatePageAction } from "@/actions/admin/content";
 import { timeAgo } from "@/lib/time";
 import type { pageList } from "@/server/admin/content";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type Row = Awaited<ReturnType<typeof pageList>>[number];
 const STATUS_TONE = { PUBLISHED: "green", DRAFT: "amber" } as const;
@@ -61,7 +62,7 @@ export function PagesList({ rows }: { rows: Row[] }) {
             },
             { key: "tp", header: t("cms.template"), cell: (r) => <span className="text-ad-muted">{t(`cms.tpl.${r.template}` as "cms.tpl.standard")}</span> },
             { key: "s", header: t("cms.sections"), align: "center", cell: (r) => <span className="tabular text-ad-muted">{r.sections}</span> },
-            { key: "u", header: locale === "ar" ? "آخر تعديل" : "Updated", cell: (r) => <span className="text-ad-muted">{timeAgo(r.updatedAt, locale)}</span> },
+            { key: "u", header: locale === "ar" ? "آخر تعديل" : "Updated", cell: (r) => <span className="text-ad-muted"><TimeAgo date={r.updatedAt} /></span> },
             { key: "st", header: t("c.status"), cell: (r) => <Pill tone={STATUS_TONE[r.status]}>{statusLabel(r.status)}</Pill> },
             {
               key: "a",

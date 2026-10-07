@@ -56,7 +56,7 @@ function useVariantSelection(product: ProductDetailDTO) {
   return { selected, variant, choose, isAvailable, isInStock };
 }
 
-export function ProductPurchase({ product, shippingNote }: { product: ProductDetailDTO; shippingNote: string | null }) {
+export function ProductPurchase({ product, shippingNote, icons }: { product: ProductDetailDTO; shippingNote: string | null; icons?: Partial<Record<"delivery" | "warranty" | "returns" | "payment", React.ReactNode>> }) {
   const t = useTranslations("product");
   const router = useRouter();
   const { format } = useStore();
@@ -231,15 +231,16 @@ export function ProductPurchase({ product, shippingNote }: { product: ProductDet
 
         <ul className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
           {[
-            { icon: Truck, text: shippingNote },
-            { icon: ShieldCheck, text: product.warranty || t("genuine") },
-            { icon: RotateCcw, text: t("returns") },
-            { icon: CreditCard, text: t("securePay") },
+            { concept: "delivery" as const, Icon: Truck, text: shippingNote },
+            { concept: "warranty" as const, Icon: ShieldCheck, text: product.warranty || t("genuine") },
+            { concept: "returns" as const, Icon: RotateCcw, text: t("returns") },
+            { concept: "payment" as const, Icon: CreditCard, text: t("securePay") },
           ]
             .filter((x) => x.text)
-            .map(({ icon: Icon, text }) => (
+            .map(({ concept, Icon, text }) => (
               <li key={text} className="flex items-center gap-3 rounded-2xl bg-surface px-4 py-3">
-                <Icon className="size-5 shrink-0 text-fg/70" />
+                {/* Store-type icon (server-rendered) with the standard icon as fallback. */}
+                {icons?.[concept] ?? <Icon className="size-5 shrink-0 text-fg/70" />}
                 <span className="text-fg/80">{text}</span>
               </li>
             ))}

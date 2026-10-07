@@ -109,7 +109,7 @@ async function alertNewAdminSignIn(userId: string, email: string, meta: { ip: st
   const user = await db.user.findUnique({ where: { id: userId }, select: { name: true, locale: true } });
   const ar = user?.locale !== "en";
   const name = t(store.name, ar ? "ar" : "en");
-  const when = new Date().toLocaleString(ar ? "ar-JO" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+  const when = new Date().toLocaleString(ar ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
   const rows = [
     [ar ? "الوقت" : "Time", when],
     [ar ? "عنوان IP" : "IP address", meta.ip ?? "—"],

@@ -29,6 +29,8 @@ export type WebhookResult = { orderId?: string; providerRef?: string; outcome: "
 
 export type PaymentProvider = IntegrationDefinition & {
   category: "payments";
+  /** Default checkout title per language (the admin can override it in the method's config). */
+  checkoutTitle?: { en: string; ar: string };
   payment?: {
     /** Currencies the gateway can charge; if the base currency isn't listed, `settlementCurrency` config is used. */
     currencies?: string[];

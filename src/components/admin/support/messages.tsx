@@ -12,6 +12,7 @@ import { setContactStatusAction, replyContactAction } from "@/actions/admin/supp
 import { timeAgo, fmtDate } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { contactList, ContactDetail } from "@/server/admin/support";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type List = Awaited<ReturnType<typeof contactList>>;
 type Status = "NEW" | "READ" | "REPLIED" | "ARCHIVED" | "SPAM";
@@ -90,7 +91,7 @@ export function MessagesList({ data }: { data: List }) {
                     <span className="flex items-center gap-2">
                       <span className={cn("truncate text-sm", m.status === "NEW" ? "font-semibold" : "font-medium")}>{m.name}</span>
                       {m.status !== "NEW" && m.status !== "READ" && <Pill tone={TONE[m.status]}>{label(m.status)}</Pill>}
-                      <span className="ms-auto shrink-0 text-xs text-ad-muted">{timeAgo(m.createdAt, locale)}</span>
+                      <span className="ms-auto shrink-0 text-xs text-ad-muted"><TimeAgo date={m.createdAt} /></span>
                     </span>
                     {m.subject && <span className={cn("block truncate text-[13px]", m.status === "NEW" && "font-medium")}>{m.subject}</span>}
                     <span className="block truncate text-xs text-ad-muted" dir="auto">

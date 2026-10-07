@@ -1,0 +1,2 @@
+/** Same effect before hydration on full page loads of admin URLs (rendered in the root <head>). */
+export const ADMIN_MODE_BOOT = `(function(){if(!/^\\/(ar|en)\\/admin(\\/|$)/.test(location.pathname))return;var d=document.documentElement;d.classList.add('admin-mode');try{var t=localStorage.getItem('nq:admin-theme')||'system';d.classList.toggle('ad-dark',t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches))}catch(e){}})();`;

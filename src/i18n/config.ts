@@ -3,7 +3,7 @@ export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = "ar";
 
 export const localeMeta: Record<Locale, { dir: "rtl" | "ltr"; label: string; short: string; intl: string; og: string }> = {
-  ar: { dir: "rtl", label: "العربية", short: "ع", intl: "ar-JO", og: "ar_JO" },
+  ar: { dir: "rtl", label: "العربية", short: "ع", intl: "ar-SA-u-ca-gregory-nu-latn", og: "ar_SA" },
   en: { dir: "ltr", label: "English", short: "EN", intl: "en-US", og: "en_US" },
 };
 

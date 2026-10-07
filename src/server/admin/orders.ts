@@ -1,4 +1,5 @@
 import "server-only";
+import { paymentMethodTitle } from "@/server/integrations/registry";
 import { db, Prisma } from "../db";
 import { t } from "@/lib/i18n-text";
 import { hasPermission } from "@/config/permissions";
@@ -7,7 +8,7 @@ import type { CurrentStaff } from "../auth/session";
 export const ORDER_PAGE_SIZE = 25;
 const OPEN = ["pending", "paid", "processing"];
 
-export type OrderListQuery = { q?: string; status?: string; payment?: string; method?: string; from?: string; to?: string; page?: number; customerId?: string };
+export type OrderListQuery = { q?: string; status?: string; payment?: string; method?: string; from?: string; to?: string; page?: number; customerId?: string; /** Comma-separated order ids (export of a selection). */ ids?: string };
 
 export function orderWhere(q: OrderListQuery): Prisma.OrderWhereInput {
   const and: Prisma.OrderWhereInput[] = [];
@@ -16,6 +17,7 @@ export function orderWhere(q: OrderListQuery): Prisma.OrderWhereInput {
   if (q.payment) and.push({ paymentStatus: q.payment as Prisma.EnumPaymentStatusFilter["equals"] });
   if (q.method) and.push({ paymentMethod: q.method });
   if (q.customerId) and.push({ userId: q.customerId });
+  if (q.ids) and.push({ id: { in: q.ids.split(",").filter((x) => /^[a-z0-9]{8,40}$/i.test(x)).slice(0, 500) } });
   if (q.from) and.push({ placedAt: { gte: new Date(`${q.from}T00:00:00`) } });
   if (q.to) and.push({ placedAt: { lt: new Date(new Date(`${q.to}T00:00:00`).getTime() + 86_400_000) } });
   if (q.q) {
@@ -51,7 +53,7 @@ export async function listOrders(q: OrderListQuery, locale: string) {
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / ORDER_PAGE_SIZE)),
-    statuses: statuses.map((s) => ({ key: s.key, label: t(s.label, locale), color: s.color, count: countMap[s.key] ?? 0 })),
+    statuses: statuses.map((s) => ({ key: s.key, label: t(s.label, locale), color: s.color, count: countMap[s.key] ?? 0, notify: s.notifyCustomer, isFinal: s.isFinal })),
     openCount: OPEN.reduce((s, k) => s + (countMap[k] ?? 0), 0),
     allCount: Object.values(countMap).reduce((a, b) => a + b, 0),
   };
@@ -83,7 +85,7 @@ export async function orderDetail(id: string, locale: string, staff: CurrentStaf
     locale: o.locale,
     status: { key: o.statusKey, label: t(o.status.label, locale), color: o.status.color },
     paymentStatus: o.paymentStatus,
-    paymentMethod: cfg[`title_${locale}`] || o.paymentMethod,
+    paymentMethod: paymentMethodTitle(o.paymentMethod, cfg, locale),
     paymentMethodKey: o.paymentMethod,
     placedAt: o.placedAt.toISOString(),
     customer: {

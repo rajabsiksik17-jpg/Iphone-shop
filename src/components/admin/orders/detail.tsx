@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Printer, Copy, MessageCircle, Mail, Phone, Truck, CreditCard, RotateCcw, CheckCircle2, StickyNote, User } from "lucide-react";
+import { Printer, Copy, MessageCircle, Mail, Phone, Truck, CreditCard, RotateCcw, CheckCircle2, StickyNote, User, MoreHorizontal, ExternalLink } from "lucide-react";
+import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/menu";
+import { DrawerBody, DrawerHeader } from "../drawer";
 import { toast } from "sonner";
 import { Link, useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,10 +16,22 @@ import { updateOrderStatusAction, markOrderPaidAction, addOrderNoteAction, refun
 import { fmtDate, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { OrderDetail } from "@/server/admin/orders";
+import { TimeAgo } from "@/components/ui/time-ago";
 
-export function OrderDetailView({ order }: { order: OrderDetail }) {
+/**
+ * Order management view. Renders as a full page or inside the orders drawer
+ * (`layout="drawer"`): same sections and actions, with the header moved into
+ * the drawer's sticky header and a layout driven by the available width.
+ */
+export function OrderDetailView({ order, layout = "page", context, onChanged }: { order: OrderDetail; layout?: "page" | "drawer"; context?: string[]; onChanged?: () => void }) {
   const { t, fmt, locale, can, money } = useAdmin();
   const router = useRouter();
+  const drawer = layout === "drawer";
+  // Refresh the page underneath (list, counters) and the drawer's own data.
+  const changed = () => {
+    router.refresh();
+    onChanged?.();
+  };
   const [pending, start] = useTransition();
   const [status, setStatus] = useState(order.status.key);
   const [notify, setNotify] = useState(order.statuses.find((s) => s.key === order.status.key)?.notifyCustomer ?? true);
@@ -42,42 +56,85 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
       if (r.ok) {
         toast.success(t("o.statusUpdated"));
         setStatusNote("");
-        router.refresh();
+        changed();
       } else toast.error(t("c.error"));
     });
 
-  return (
+  const unpaid = order.paymentStatus === "UNPAID" || order.paymentStatus === "PENDING" || order.paymentStatus === "FAILED";
+  const badges = (
     <>
-      <PageHeader
-        back={{ href: "/admin/orders", label: t("o.title") }}
-        title={
-          <span className="flex flex-wrap items-center gap-3">
-            {order.number}
-            <ColorPill label={order.status.label} color={order.status.color} />
-            <Pill tone={PAY_TONE[order.paymentStatus]}>{t(`o.pay.${order.paymentStatus}` as "o.pay.PAID")}</Pill>
-          </span>
-        }
-        description={`${fmtDate(order.placedAt, locale, true)} · ${timeAgo(order.placedAt, locale)}`}
-        actions={
-          <>
-            <Button variant="outline" size="sm" leftIcon={<Printer />} onClick={() => window.open(`/api/admin/orders/${order.id}/invoice?locale=${locale}`, "_blank")}>
-              {t("o.print")}
-            </Button>
-            {manage && (order.paymentStatus === "UNPAID" || order.paymentStatus === "PENDING" || order.paymentStatus === "FAILED") && (
-              <Button size="sm" leftIcon={<CheckCircle2 />} onClick={() => setPaidOpen(true)}>
-                {t("o.markPaid")}
-              </Button>
-            )}
-            {can("orders.refund") && refundable > 0 && (
-              <Button variant="outline" size="sm" leftIcon={<RotateCcw />} onClick={() => setRefundOpen(true)}>
-                {t("o.refund")}
-              </Button>
-            )}
-          </>
-        }
-      />
+      <ColorPill label={order.status.label} color={order.status.color} />
+      <Pill tone={PAY_TONE[order.paymentStatus]}>{t(`o.pay.${order.paymentStatus}` as "o.pay.PAID")}</Pill>
+    </>
+  );
+  const printInvoice = () => window.open(`/api/admin/orders/${order.id}/invoice?locale=${locale}`, "_blank");
+  // Less frequent actions live in the "more" menu; only what applies to this order is shown.
+  const moreMenu = (
+    <Dropdown>
+      <DropdownTrigger className="grid size-9 place-items-center rounded-lg border border-ad-border text-ad-muted transition hover:bg-ad-hover hover:text-ad-fg" aria-label={t("c.actions")}>
+        <MoreHorizontal className="size-4" />
+      </DropdownTrigger>
+      <DropdownContent align="end">
+        <DropdownItem onSelect={printInvoice}>
+          <Printer /> {t("o.print")}
+        </DropdownItem>
+        <DropdownItem onSelect={() => (navigator.clipboard.writeText(order.number), toast.success(t("c.copied")))}>
+          <Copy /> {locale === "ar" ? "نسخ رقم الطلب" : "Copy order number"}
+        </DropdownItem>
+        {order.pii && order.customer.email && (
+          <DropdownItem asChild>
+            <a href={`mailto:${order.customer.email}?subject=${encodeURIComponent(order.number)}`}>
+              <Mail /> {locale === "ar" ? "مراسلة العميل" : "Email customer"}
+            </a>
+          </DropdownItem>
+        )}
+        {order.pii && waNumber && (
+          <DropdownItem asChild>
+            <a href={`https://wa.me/${waNumber}?text=${encodeURIComponent(order.number)}`} target="_blank" rel="noopener noreferrer">
+              <MessageCircle /> {t("o.whatsapp")}
+            </a>
+          </DropdownItem>
+        )}
+        {order.customer.user && can("customers.view") && (
+          <DropdownItem asChild>
+            <Link href={`/admin/customers/${order.customer.user.id}`}>
+              <User /> {locale === "ar" ? "ملف العميل" : "Customer profile"}
+            </Link>
+          </DropdownItem>
+        )}
+        {can("orders.refund") && refundable > 0 && (
+          <DropdownItem onSelect={() => setRefundOpen(true)}>
+            <RotateCcw /> {t("o.refund")}
+          </DropdownItem>
+        )}
+        {drawer && (
+          <DropdownItem asChild>
+            <Link href={`/admin/orders/${order.id}`}>
+              <ExternalLink /> {locale === "ar" ? "فتح الصفحة الكاملة" : "Open full page"}
+            </Link>
+          </DropdownItem>
+        )}
+      </DropdownContent>
+    </Dropdown>
+  );
+  const headerActions = (
+    <>
+      {manage && unpaid && (
+        <Button size="sm" leftIcon={<CheckCircle2 />} onClick={() => setPaidOpen(true)}>
+          {t("o.markPaid")}
+        </Button>
+      )}
+      {!drawer && (
+        <Button variant="outline" size="sm" leftIcon={<Printer />} onClick={printInvoice}>
+          {t("o.print")}
+        </Button>
+      )}
+      {moreMenu}
+    </>
+  );
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+  const content = (
+      <div className={cn("grid gap-4", drawer ? "@4xl:grid-cols-[minmax(0,1fr)_340px]" : "xl:grid-cols-[minmax(0,1fr)_360px]")}>
         <div className="space-y-4">
           <Panel title={`${t("o.items")} (${order.items.length})`} padded={false}>
             <ul className="divide-y divide-ad-border">
@@ -322,7 +379,7 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
                 <li key={n.id} className="rounded-lg bg-ad-sunken p-3 text-[13px]">
                   <p className="whitespace-pre-wrap">{n.body}</p>
                   <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-ad-muted">
-                    <StickyNote className="size-3" /> {n.author} · {timeAgo(n.createdAt, locale)} {n.isInternal && `· ${t("o.internal")}`}
+                    <StickyNote className="size-3" /> {n.author} · <TimeAgo date={n.createdAt} /> {n.isInternal && `· ${t("o.internal")}`}
                   </p>
                 </li>
               ))}
@@ -330,6 +387,31 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
           </Panel>
         </div>
       </div>
+  );
+
+  return (
+    <>
+      {drawer ? (
+        <>
+          <DrawerHeader context={context} title={order.number} badges={badges} subtitle={`${order.customer.name} · ${fmt(order.totals.total)} · ${timeAgo(order.placedAt, locale)}`} actions={headerActions} />
+          <DrawerBody>{content}</DrawerBody>
+        </>
+      ) : (
+        <>
+          <PageHeader
+            back={{ href: "/admin/orders", label: t("o.title") }}
+            title={
+              <span className="flex flex-wrap items-center gap-3">
+                {order.number}
+                {badges}
+              </span>
+            }
+            description={`${fmtDate(order.placedAt, locale, true)} · ${timeAgo(order.placedAt, locale)}`}
+            actions={headerActions}
+          />
+          {content}
+        </>
+      )}
 
       <Modal open={paidOpen} onOpenChange={setPaidOpen} title={t("o.markPaid")} description={t("o.markPaidHint")}>
         <Label optional>{t("o.reference")}</Label>
@@ -344,7 +426,7 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
               if (r.ok) {
                 toast.success(t("o.statusUpdated"));
                 setPaidOpen(false);
-                router.refresh();
+                changed();
               } else toast.error(t("c.error"));
             })
           }
@@ -404,7 +486,7 @@ export function OrderDetailView({ order }: { order: OrderDetail }) {
                 if (r.ok) {
                   toast.success(r.data.manual ? t("o.refundManual") : t("o.refunded"));
                   setRefundOpen(false);
-                  router.refresh();
+                  changed();
                 } else toast.error(r.meta?.message ? String(r.meta.message) : t("c.error"));
               })
             }

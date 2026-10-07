@@ -54,6 +54,7 @@ export async function ListingView({
   locale,
   hideBrands,
   query,
+  explore,
 }: {
   result: ListingResult;
   basePath: string;
@@ -61,24 +62,35 @@ export async function ListingView({
   locale: Locale;
   hideBrands?: boolean;
   query?: string;
+  /** Suggestions shown under small or empty listings (e.g. other categories). */
+  explore?: React.ReactNode;
 }) {
   const t = await getTranslations("listing");
   const sort = ((typeof params.sort === "string" && params.sort) || (query ? "relevance" : "featured")) as SortKey;
   const sortOptions = SORT_KEYS.filter((k) => k !== "relevance" || query);
+  // Filters narrowed the results (as opposed to the listing simply being small).
+  const refined = Object.entries(params).some(([k, v]) => !["sort", "page", "q"].includes(k) && v);
+  // A handful of products needs no filter sidebar: facets of 1–3 items only add noise.
+  // Cards keep their normal size either way (fixed column tracks, never stretched).
+  const compact = result.total <= 3 && !refined;
+  const small = result.total <= 3;
+  const clearHref = query ? `${basePath}?q=${encodeURIComponent(query)}` : basePath;
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-10">
-      <aside className="hidden lg:block" aria-label={t("filters")}>
-        <div className="sticky top-36 max-h-[calc(100dvh-10rem)] overflow-y-auto pe-2 [scrollbar-width:thin]">
-          <FilterPanel facets={result.facets} hideBrands={hideBrands} />
-        </div>
-      </aside>
+    <div className={cn("grid grid-cols-1 gap-8", !compact && "lg:grid-cols-[260px_minmax(0,1fr)] lg:gap-10")}>
+      {!compact && (
+        <aside className="hidden lg:block" aria-label={t("filters")}>
+          <div className="sticky top-36 max-h-[calc(100dvh-10rem)] overflow-y-auto pe-2 [scrollbar-width:thin]">
+            <FilterPanel facets={result.facets} hideBrands={hideBrands} />
+          </div>
+        </aside>
+      )}
       <div className="min-w-0">
         {query && <SearchTracker q={query} results={result.total} />}
-        <div className="sticky top-16 z-20 -mx-4 mb-5 flex items-center justify-between gap-3 bg-bg/90 px-4 py-3 backdrop-blur-lg md:static md:mx-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none">
+        <div className={cn("sticky top-16 z-20 -mx-4 mb-5 flex items-center justify-between gap-3 bg-bg/90 px-4 py-3 backdrop-blur-lg md:static md:mx-0 md:bg-transparent md:px-0 md:py-0 md:backdrop-blur-none", result.total === 0 && !refined && "hidden")}>
           <p className="text-sm text-muted">{t("productsCount", { count: result.total })}</p>
           <div className="flex items-center gap-2">
-            <MobileFilters facets={result.facets} total={result.total} hideBrands={hideBrands} />
-            <SortSelect options={sortOptions} current={sort} />
+            {!compact && <MobileFilters facets={result.facets} total={result.total} hideBrands={hideBrands} />}
+            {result.total > 1 && <SortSelect options={sortOptions} current={sort} />}
           </div>
         </div>
         <div className="mb-6">
@@ -87,12 +99,33 @@ export async function ListingView({
         {result.items.length ? (
           <div data-listing-grid>
             <JsonLd data={itemListJsonLd(result.items, locale)} />
-            <ProductGrid products={result.items} priorityCount={4} className="xl:grid-cols-3 2xl:grid-cols-4" />
+            <ProductGrid products={result.items} priorityCount={4} className={compact ? "lg:grid-cols-4 2xl:grid-cols-5" : "xl:grid-cols-3 2xl:grid-cols-4"} />
             <Pagination basePath={basePath} params={params} page={result.page} pageCount={result.pageCount} />
           </div>
+        ) : refined ? (
+          <EmptyState
+            icon={<PackageSearch />}
+            title={t("noProducts")}
+            text={t("noProductsHint")}
+            action={
+              <Link href={clearHref} className="inline-flex h-11 items-center rounded-btn border border-border px-5 text-sm font-medium transition hover:bg-surface">
+                {(await getTranslations("common"))("clearAll")}
+              </Link>
+            }
+          />
         ) : (
-          <EmptyState icon={<PackageSearch />} title={query ? (await getTranslations("search"))("noResults", { q: query }) : t("noProducts")} text={query ? (await getTranslations("search"))("noResultsHint") : t("noProductsHint")} />
+          <EmptyState
+            icon={<PackageSearch />}
+            title={query ? (await getTranslations("search"))("noResults", { q: query }) : t("emptyCategory")}
+            text={query ? (await getTranslations("search"))("noResultsHint") : t("emptyCategoryHint")}
+            action={
+              <Link href="/shop" className="inline-flex h-11 items-center rounded-btn bg-primary px-5 text-sm font-medium text-primary-fg transition hover:bg-primary/90">
+                {t("browseAll")}
+              </Link>
+            }
+          />
         )}
+        {small && !refined && explore}
       </div>
     </div>
   );

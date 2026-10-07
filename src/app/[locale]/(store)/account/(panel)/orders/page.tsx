@@ -27,9 +27,9 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
                   <Link href={`/account/orders/${o.number}`} className="grid grid-cols-[1fr_auto] items-center gap-3 p-4 transition hover:bg-surface/60 sm:grid-cols-[1.2fr_1fr_1fr_auto_auto]">
                     <div>
                       <p className="font-medium">{o.number}</p>
-                      <p className="text-xs text-muted sm:hidden">{o.placedAt.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium" })}</p>
+                      <p className="text-xs text-muted sm:hidden">{o.placedAt.toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium" })}</p>
                     </div>
-                    <p className="hidden text-sm text-muted sm:block">{o.placedAt.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium" })}</p>
+                    <p className="hidden text-sm text-muted sm:block">{o.placedAt.toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium" })}</p>
                     <p className="hidden text-sm text-muted sm:block">{t("common.items", { count: o._count.items })}</p>
                     <div className="flex items-center gap-3 sm:contents">
                       <StatusPill label={tr(o.status.label, locale)} color={o.status.color} />

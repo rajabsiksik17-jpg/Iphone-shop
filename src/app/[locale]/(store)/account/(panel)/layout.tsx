@@ -23,7 +23,7 @@ export default async function AccountLayout({ children }: { children: ReactNode 
         <span className="grid size-14 place-items-center rounded-full bg-primary text-xl font-semibold text-primary-fg">{user.name.slice(0, 1).toUpperCase()}</span>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t("welcome", { name: user.name.split(" ")[0] })}</h1>
-          <p className="text-sm text-muted">{t("memberSince", { date: user.createdAt.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { month: "long", year: "numeric" }) })}</p>
+          <p className="text-sm text-muted">{t("memberSince", { date: user.createdAt.toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { month: "long", year: "numeric" }) })}</p>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[240px_minmax(0,1fr)]">

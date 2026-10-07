@@ -1,4 +1,5 @@
 import "server-only";
+import { invalidateCategoryCounts } from "@/server/catalog/taxonomy";
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/server/auth/guards";
 import { toActionError, type ActionResult } from "@/server/errors";
@@ -14,7 +15,10 @@ export async function adminRun<T>(permission: Permission | Permission[] | null, 
   try {
     const staff = await requireStaff(permission ?? undefined);
     const data = await fn(staff);
-    if (opts.revalidate !== false) revalidatePath("/", "layout");
+    if (opts.revalidate !== false) {
+      revalidatePath("/", "layout");
+      invalidateCategoryCounts();
+    }
     return { ok: true, data };
   } catch (e) {
     return toActionError(e);

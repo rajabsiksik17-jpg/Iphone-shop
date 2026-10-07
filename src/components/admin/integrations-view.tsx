@@ -108,7 +108,7 @@ export function IntegrationsView({ items, appUrl }: { items: IntegrationListItem
                       <Lock className="size-3" /> {locale === "ar" ? "لا تملك الصلاحية" : "No permission"}
                     </span>
                   ))}
-                {i.lastSyncAt && <span className="text-xs text-ad-muted">{t("int.lastSync", { when: timeAgo(i.lastSyncAt, locale) })}</span>}
+                {i.lastSyncAt && <span className="text-xs text-ad-muted" suppressHydrationWarning>{t("int.lastSync", { when: timeAgo(i.lastSyncAt, locale) })}</span>}
                 {i.docsUrl && (
                   <a href={i.docsUrl} target="_blank" rel="noopener noreferrer" className="ms-auto inline-flex items-center gap-1 text-xs text-ad-muted hover:text-ad-fg">
                     {t("int.docs")} <ExternalLink className="size-3" />

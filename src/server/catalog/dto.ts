@@ -26,9 +26,13 @@ export const cardInclude = {
     where: { isActive: true },
     select: { id: true, price: true, salePrice: true, saleStartsAt: true, saleEndsAt: true, stock: true },
   },
+  // Colours (swatches) plus the attributes the store type shows as card specs.
   attributes: {
-    where: { attribute: { type: "COLOR" } },
-    include: { values: { include: { value: { select: { id: true, label: true, colorHex: true, position: true } } } } },
+    where: { OR: [{ attribute: { type: "COLOR" } }, { attribute: { showOnCard: true } }] },
+    include: {
+      attribute: { select: { type: true, unit: true, position: true, showOnCard: true, name: true } },
+      values: { include: { value: { select: { id: true, label: true, colorHex: true, position: true } } } },
+    },
   },
   categories: { where: { isPrimary: true }, include: { category: { select: { name: true } } }, take: 1 },
 } satisfies Prisma.ProductInclude;
@@ -76,6 +80,7 @@ export function toCard(p: CardProduct, locale: string, opts: { newProductDays: n
   const name = t(p.name, locale);
   const price = priceDTO(p);
   const swatches = p.attributes
+    .filter((a) => a.attribute.type === "COLOR")
     .flatMap((a) => a.values.map((v) => v.value))
     .sort((a, b) => a.position - b.position)
     .filter((v) => v.colorHex)
@@ -95,6 +100,40 @@ export function toCard(p: CardProduct, locale: string, opts: { newProductDays: n
     isVariable: p.type === "VARIABLE",
     quickAdd: p.type === "SIMPLE" && p.stockStatus !== "OUT_OF_STOCK",
     swatches,
+    cardSpecs: cardSpecs(p, locale),
     category: p.categories[0] ? t(p.categories[0].category.name, locale) : null,
   };
+}
+
+/**
+ * Compact specs for the product card ("256GB – 1TB · 8GB"), from attributes
+ * flagged "show on card" for the store type. Several variation values
+ * collapse to a range; at most three specs are shown.
+ */
+function cardSpecs(p: CardProduct, locale: string): string[] {
+  return p.attributes
+    .filter((a) => a.attribute.showOnCard && a.attribute.type !== "COLOR")
+    .sort((a, b) => a.attribute.position - b.attribute.position)
+    .flatMap((a) => {
+      const unit = a.attribute.unit ? ` ${a.attribute.unit}` : "";
+      switch (a.attribute.type) {
+        case "SELECT":
+        case "MULTISELECT": {
+          const labels = a.values.map((v) => v.value).sort((x, y) => x.position - y.position).map((v) => t(v.label, locale)).filter(Boolean);
+          if (!labels.length) return [];
+          return [labels.length <= 2 ? labels.join(" / ") : `${labels[0]} – ${labels[labels.length - 1]}`];
+        }
+        case "TEXT": {
+          const v = t(a.textValue, locale);
+          return v ? [v.length > 28 ? `${v.slice(0, 27)}…` : v] : [];
+        }
+        case "NUMBER":
+          return a.numberValue != null ? [`${a.numberValue}${unit}`] : [];
+        case "BOOLEAN":
+          return a.boolValue ? [t(a.attribute.name, locale)] : [];
+        default:
+          return [];
+      }
+    })
+    .slice(0, 3);
 }

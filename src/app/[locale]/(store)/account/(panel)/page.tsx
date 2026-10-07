@@ -60,7 +60,7 @@ export default async function AccountDashboard({ params }: { params: Promise<{ l
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{o.number}</p>
-                      <p className="text-xs text-muted">{o.placedAt.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium" })}</p>
+                      <p className="text-xs text-muted">{o.placedAt.toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium" })}</p>
                     </div>
                     <StatusPill label={tr(o.status.label, locale)} color={o.status.color} />
                     <span className="tabular hidden w-24 text-end text-sm font-semibold sm:block">{await formatBase(o.total, locale)}</span>

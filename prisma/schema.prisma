@@ -216,6 +216,7 @@ model Media {
   valueImages     AttributeValue[]
   slideDesktop    Slide[]          @relation("SlideDesktop")
   slideMobile     Slide[]          @relation("SlideMobile")
+  slideTablet     Slide[]          @relation("SlideTablet")
 
   @@index([createdAt])
 }
@@ -309,6 +310,8 @@ model Attribute {
   isVisible       Boolean             @default(true)
   // Shown as an icon tile in the "key specs" strip on the product page.
   isHighlighted   Boolean             @default(false)
+  // Shown as a compact spec on product cards (store-type dependent).
+  showOnCard      Boolean             @default(false)
   position        Int                 @default(0)
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
@@ -1249,8 +1252,12 @@ model Slide {
   endsAt         DateTime?
   desktopImageId String?
   desktopImage   Media?    @relation("SlideDesktop", fields: [desktopImageId], references: [id], onDelete: SetNull)
+  tabletImageId  String?
+  tabletImage    Media?    @relation("SlideTablet", fields: [tabletImageId], references: [id], onDelete: SetNull)
   mobileImageId  String?
   mobileImage    Media?    @relation("SlideMobile", fields: [mobileImageId], references: [id], onDelete: SetNull)
+  // Per-language overrides: { ar?: { desktop?, tablet?, mobile? }, en?: {…} } (media ids).
+  localeImages   Json      @default("{}")
   eyebrow        Json      @default("{}")
   heading        Json      @default("{}")
   body           Json      @default("{}")

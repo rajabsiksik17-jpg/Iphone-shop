@@ -21,7 +21,8 @@ import { ContactForm } from "@/components/store/contact-form";
 import { Picture } from "@/components/ui/picture";
 import { SectionHeading } from "@/components/ui/misc";
 import { Stars } from "@/components/ui/rating";
-import { CmsIcon } from "@/components/ui/icon";
+import { ServerIcon } from "@/components/icons/server-icon";
+import { customSvgsFor } from "@/server/icons";
 import { SocialIcon, socialLabel } from "@/components/ui/social-icon";
 import { JsonLd, faqJsonLd } from "@/components/seo/json-ld";
 import type { SectionStyle } from "@/cms/sections";
@@ -56,7 +57,7 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
 
   async ticker(_sec, { locale }) {
     const [items, { ticker }] = await Promise.all([getAnnouncements(locale), getManySettings(["ticker"])]);
-    return <Ticker items={items} settings={ticker} dir={locale === "ar" ? "rtl" : "ltr"} />;
+    return <Ticker items={items} settings={ticker} dir={locale === "ar" ? "rtl" : "ltr"} svgs={await customSvgsFor(items.map((i) => i.icon))} />;
   },
 
   async category_grid({ data, style }, { locale }) {
@@ -160,22 +161,44 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
   async promo_banners({ data, style }, { locale }) {
     const items = (data.items as Record<string, unknown>[]) ?? [];
     if (!items.length) return null;
-    const media = await Promise.all(items.map((i) => mediaFor(i.image, locale, s(i.title, locale))));
+    const [media, mobileMedia] = await Promise.all([
+      Promise.all(items.map((i) => mediaFor(i.image, locale, s(i.title, locale)))),
+      Promise.all(items.map((i) => mediaFor(i.mobileImage, locale, s(i.title, locale)))),
+    ]);
+    const many = items.length > 1;
     return (
       <SectionShell style={style}>
-        <div className={cn("grid gap-4", items.length === 2 && "md:grid-cols-2", items.length >= 3 && "md:grid-cols-3")}>
+        {/* Phones: landscape cards; several banners become a swipeable row instead of a tall stack. */}
+        <div
+          className={cn(
+            "gap-4",
+            many ? "no-scrollbar -mx-4 flex snap-x snap-mandatory overflow-x-auto px-4 md:mx-0 md:grid md:overflow-visible md:px-0" : "grid",
+            items.length === 2 && "md:grid-cols-2",
+            items.length >= 3 && "md:grid-cols-3",
+          )}
+        >
           {items.map((it, i) => {
             const light = it.theme !== "dark";
+            const desktop = media[i];
+            const phone = mobileMedia[i] ?? desktop;
             const inner = (
-              <div className={cn("group relative flex min-h-[280px] overflow-hidden rounded-[calc(var(--nq-radius)*1.4)] md:min-h-[340px]", light ? "text-white" : "text-neutral-950")} style={{ backgroundColor: (it.background as string) || "#0f172a" }}>
-                {media[i] && <Picture image={media[i]} sizes="(min-width:768px) 50vw, 100vw" className="absolute inset-0 transition duration-1000 group-hover:scale-[1.03]" />}
-                {media[i] && light && <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/10 to-transparent" />}
-                <div className="relative mt-auto p-6 md:p-8">
-                  {s(it.eyebrow, locale) && <p className="text-xs font-semibold uppercase tracking-[0.14em] opacity-80">{s(it.eyebrow, locale)}</p>}
-                  <h3 className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">{s(it.title, locale)}</h3>
-                  {s(it.text, locale) && <p className="mt-2 max-w-sm text-sm opacity-85">{s(it.text, locale)}</p>}
+              <div
+                className={cn("group relative flex aspect-[16/10] overflow-hidden rounded-[calc(var(--nq-radius)*1.4)] md:aspect-auto md:min-h-[340px]", light ? "text-white" : "text-neutral-950")}
+                style={{ backgroundColor: (it.background as string) || "#0f172a" }}
+              >
+                {phone && (
+                  <picture className="absolute inset-0 transition duration-1000 group-hover:scale-[1.03]">
+                    {desktop && desktop !== phone && <source media="(min-width: 768px)" srcSet={desktop.srcSet.length ? desktop.srcSet.map((r) => `${r.url} ${r.w}w`).join(", ") : desktop.url} sizes="50vw" />}
+                    <img src={phone.url} srcSet={phone.srcSet.length ? phone.srcSet.map((r) => `${r.url} ${r.w}w`).join(", ") : undefined} sizes="(min-width:768px) 50vw, 90vw" alt={phone.alt} loading="lazy" decoding="async" className="size-full object-cover" />
+                  </picture>
+                )}
+                {phone && light && <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/15 to-transparent" />}
+                <div className="relative mt-auto p-5 md:p-8">
+                  {s(it.eyebrow, locale) && <p className="text-[11px] font-semibold uppercase tracking-[0.14em] opacity-80 md:text-xs">{s(it.eyebrow, locale)}</p>}
+                  <h3 className="mt-1 text-xl font-semibold tracking-tight md:mt-2 md:text-3xl">{s(it.title, locale)}</h3>
+                  {s(it.text, locale) && <p className="mt-1.5 line-clamp-2 max-w-sm text-sm opacity-85 max-sm:hidden md:mt-2">{s(it.text, locale)}</p>}
                   {s(it.cta, locale) && (
-                    <span className={cn("mt-5 inline-flex h-10 items-center gap-2 rounded-btn px-5 text-sm font-semibold transition group-hover:gap-3", light ? "bg-white text-neutral-950" : "bg-neutral-950 text-white")}>
+                    <span className={cn("mt-3 inline-flex h-9 items-center gap-2 rounded-btn px-4 text-sm font-semibold transition group-hover:gap-3 md:mt-5 md:h-10 md:px-5", light ? "bg-white text-neutral-950" : "bg-neutral-950 text-white")}>
                       {s(it.cta, locale)}
                       <ArrowRight className="flip-rtl size-4" />
                     </span>
@@ -183,12 +206,15 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
                 </div>
               </div>
             );
+            const cell = cn(many && "w-[86%] shrink-0 snap-center md:w-auto");
             return it.href ? (
-              <Link key={i} href={it.href as string} className="block">
+              <Link key={i} href={it.href as string} className={cn("block", cell)}>
                 {inner}
               </Link>
             ) : (
-              <div key={i}>{inner}</div>
+              <div key={i} className={cell}>
+                {inner}
+              </div>
             );
           })}
         </div>
@@ -199,6 +225,7 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
   async features({ data, style }, { locale }) {
     const items = (data.items as Record<string, unknown>[]) ?? [];
     if (!items.length) return null;
+    const svgs = await customSvgsFor(items.map((i) => i.icon as string));
     return (
       <SectionShell style={style}>
         <SectionHeading title={s(data.title, locale)} subtitle={s(data.subtitle, locale)} align={style.align} />
@@ -206,7 +233,7 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
           {items.map((it, i) => (
             <div key={i} className="flex gap-4 rounded-card border border-border bg-bg p-5 transition hover:shadow-card">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/10 text-accent">
-                <CmsIcon name={it.icon as string} className="size-5" />
+                <ServerIcon value={it.icon as string} customSvgs={svgs} fallback="lucide:Sparkles" className="size-5" />
               </span>
               <div>
                 <h3 className="font-semibold">{s(it.title, locale)}</h3>
@@ -214,6 +241,198 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
               </div>
             </div>
           ))}
+        </div>
+      </SectionShell>
+    );
+  },
+
+  async page_hero({ data, style }, { locale, first }) {
+    const title = s(data.title, locale);
+    if (!title) return null;
+    const image = await mediaFor(data.image, locale, title);
+    const layout = (data.layout as string) || "split";
+    const Heading = first ? "h1" : "h2";
+    const cta = s(data.cta, locale) && data.href ? (
+      <Link href={data.href as string} className="mt-7 inline-flex h-12 items-center gap-2 rounded-btn bg-primary px-6 font-medium text-primary-fg transition hover:bg-primary/90">
+        {s(data.cta, locale)}
+        <ArrowRight className="flip-rtl size-4" />
+      </Link>
+    ) : null;
+    const text = (
+      <>
+        {s(data.eyebrow, locale) && <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">{s(data.eyebrow, locale)}</p>}
+        <Heading className="mt-2 text-4xl font-semibold tracking-tight text-balance md:text-5xl">{title}</Heading>
+        {s(data.subtitle, locale) && <p className="mt-4 max-w-xl text-lg leading-relaxed text-muted text-pretty">{s(data.subtitle, locale)}</p>}
+        {cta}
+      </>
+    );
+    if (layout === "banner" && image)
+      return (
+        <SectionShell style={style}>
+          <div className="relative overflow-hidden rounded-[calc(var(--nq-radius)*1.6)]">
+            <Picture image={image} sizes="100vw" priority={first} className="absolute inset-0" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-black/10" />
+            <div className="relative flex min-h-[320px] flex-col justify-end p-6 text-white md:min-h-[420px] md:p-12 [&_p]:text-white/85">{text}</div>
+          </div>
+        </SectionShell>
+      );
+    return (
+      <SectionShell style={style}>
+        <div className={cn("grid grid-cols-1 items-center gap-8 md:gap-14 [&>*]:min-w-0", layout === "split" && image && "md:grid-cols-2")}>
+          <div>{text}</div>
+          {layout === "split" && image && <Picture image={image} sizes="(min-width:768px) 50vw, 100vw" priority={first} className="aspect-[4/3] rounded-[calc(var(--nq-radius)*1.4)] bg-surface" />}
+        </div>
+      </SectionShell>
+    );
+  },
+
+  async stats({ data, style }, { locale }) {
+    const items = ((data.items as Record<string, unknown>[]) ?? []).filter((i) => i.value);
+    if (!items.length) return null;
+    const svgs = await customSvgsFor(items.map((i) => i.icon as string));
+    return (
+      <SectionShell style={style}>
+        <SectionHeading title={s(data.title, locale)} subtitle={s(data.subtitle, locale)} align={style.align} />
+        <dl className={cn("grid gap-4 grid-cols-2", items.length >= 4 ? "lg:grid-cols-4" : items.length === 3 ? "lg:grid-cols-3" : "")}>
+          {items.map((it, i) => (
+            <div key={i} className="rounded-card border border-border bg-bg p-5 text-center md:p-7">
+              {Boolean(it.icon) && (
+                <span className="mx-auto mb-3 grid size-10 place-items-center rounded-xl bg-accent/10 text-accent">
+                  <ServerIcon value={it.icon as string} customSvgs={svgs} className="size-5" />
+                </span>
+              )}
+              <dd className="tabular text-3xl font-semibold tracking-tight md:text-4xl" dir="ltr">
+                {String(it.value)}
+              </dd>
+              <dt className="mt-1 text-sm text-muted">{s(it.label, locale)}</dt>
+            </div>
+          ))}
+        </dl>
+      </SectionShell>
+    );
+  },
+
+  async timeline({ data, style }, { locale }) {
+    const items = ((data.items as Record<string, unknown>[]) ?? []).filter((i) => s(i.title, locale));
+    if (!items.length) return null;
+    return (
+      <SectionShell style={style}>
+        <SectionHeading title={s(data.title, locale)} subtitle={s(data.subtitle, locale)} align={style.align} />
+        <ol className="relative mx-auto max-w-3xl border-s border-border ps-8">
+          {items.map((it, i) => (
+            <li key={i} className="relative pb-10 last:pb-0">
+              <span className="absolute -start-[41px] top-1 grid size-5 place-items-center rounded-full bg-bg ring-4 ring-bg">
+                <span className="size-2.5 rounded-full bg-accent" />
+              </span>
+              {Boolean(it.year) && <p className="tabular text-sm font-semibold text-accent">{String(it.year)}</p>}
+              <h3 className="mt-1 text-lg font-semibold tracking-tight">{s(it.title, locale)}</h3>
+              {s(it.text, locale) && <p className="mt-1.5 leading-relaxed text-muted">{s(it.text, locale)}</p>}
+            </li>
+          ))}
+        </ol>
+      </SectionShell>
+    );
+  },
+
+  async team({ data, style }, { locale }) {
+    const items = ((data.items as Record<string, unknown>[]) ?? []).filter((i) => s(i.name, locale));
+    if (!items.length) return null;
+    const photos = await Promise.all(items.map((i) => mediaFor(i.image, locale, s(i.name, locale))));
+    return (
+      <SectionShell style={style}>
+        <SectionHeading title={s(data.title, locale)} subtitle={s(data.subtitle, locale)} align={style.align} />
+        <ul className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-4">
+          {items.map((it, i) => (
+            <li key={i} className="text-center">
+              <span className="mx-auto block aspect-square w-full max-w-[200px] overflow-hidden rounded-full bg-surface">{photos[i] && <Picture image={photos[i]} sizes="200px" className="size-full" />}</span>
+              <p className="mt-3 font-semibold">{s(it.name, locale)}</p>
+              {s(it.role, locale) && <p className="text-sm text-muted">{s(it.role, locale)}</p>}
+            </li>
+          ))}
+        </ul>
+      </SectionShell>
+    );
+  },
+
+  async map({ data, style }, { locale }) {
+    const t = await getTranslations("contact");
+    const lat = Number(data.lat);
+    const lng = Number(data.lng);
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lng) && (lat !== 0 || lng !== 0) && data.lat != null && data.lng != null;
+    const zoom = Math.min(19, Math.max(3, Number(data.zoom) || 15));
+    const custom = String(data.embedUrl ?? "").trim();
+    // Only trusted map providers can be embedded (also enforced by the CSP frame-src).
+    const embed = /^https:\/\/(www\.google\.com\/maps\/embed|www\.openstreetmap\.org\/export\/embed)/.test(custom)
+      ? custom
+      : hasCoords
+        ? (() => {
+            const d = 0.01 * Math.pow(2, 15 - zoom);
+            return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - d}%2C${lat - d / 2}%2C${lng + d}%2C${lat + d / 2}&layer=mapnik&marker=${lat}%2C${lng}`;
+          })()
+        : null;
+    const directions = (typeof data.mapsUrl === "string" && data.mapsUrl) || (hasCoords ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : null);
+    const contact = data.showContact !== false ? (await getManySettings(["contact"])).contact : null;
+    const address = s(data.address, locale) || (contact ? s(contact.address, locale) : "");
+    if (!embed && !address) return null;
+    return (
+      <SectionShell style={style}>
+        <SectionHeading title={s(data.title, locale) || t("visit")} subtitle={s(data.subtitle, locale)} align={style.align} />
+        <div className="grid grid-cols-1 overflow-hidden rounded-[calc(var(--nq-radius)*1.4)] border border-border lg:grid-cols-[1fr_2fr] [&>*]:min-w-0">
+          <div className="space-y-5 bg-surface/60 p-6 md:p-8">
+            {address && (
+              <div className="flex gap-3">
+                <MapPin className="mt-0.5 size-5 shrink-0 text-accent" />
+                <p className="whitespace-pre-line leading-relaxed">{address}</p>
+              </div>
+            )}
+            {contact?.phone && (
+              <a href={`tel:${contact.phone.replace(/\s/g, "")}`} className="flex items-center gap-3 hover:underline">
+                <Phone className="size-5 shrink-0 text-accent" />
+                <span dir="ltr">{contact.phone}</span>
+              </a>
+            )}
+            {contact && s(contact.hours, locale) && (
+              <div className="flex gap-3">
+                <Clock className="mt-0.5 size-5 shrink-0 text-accent" />
+                <p className="whitespace-pre-line text-sm leading-relaxed">{s(contact.hours, locale)}</p>
+              </div>
+            )}
+            {directions && (
+              <a href={directions} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-btn bg-primary px-5 text-sm font-medium text-primary-fg transition hover:bg-primary/90">
+                {t("directions")}
+                <ArrowRight className="flip-rtl size-4" />
+              </a>
+            )}
+          </div>
+          {embed ? (
+            <iframe src={embed} title={address || t("visit")} loading="lazy" referrerPolicy="no-referrer-when-downgrade" className="min-h-[280px] w-full border-0 lg:min-h-[380px]" />
+          ) : (
+            <div className="grid min-h-[200px] place-items-center bg-surface text-muted">
+              <MapPin className="size-8" />
+            </div>
+          )}
+        </div>
+      </SectionShell>
+    );
+  },
+
+  async business_hours({ data, style }, { locale }) {
+    const t = await getTranslations("contact");
+    const items = ((data.items as Record<string, unknown>[]) ?? []).filter((i) => s(i.day, locale));
+    if (!items.length) return null;
+    return (
+      <SectionShell style={style}>
+        <div className="mx-auto max-w-xl">
+          <SectionHeading title={s(data.title, locale) || t("hours")} subtitle={s(data.subtitle, locale)} align={style.align} />
+          <dl className="divide-y divide-border rounded-card border border-border bg-bg">
+            {items.map((it, i) => (
+              <div key={i} className="flex items-center justify-between gap-4 px-5 py-3.5">
+                <dt className="font-medium">{s(it.day, locale)}</dt>
+                <dd className={cn("tabular text-end text-sm", it.closed ? "font-medium text-sale" : "text-muted")}>{it.closed ? t("closed") : s(it.hours, locale)}</dd>
+              </div>
+            ))}
+          </dl>
+          {s(data.note, locale) && <p className="mt-3 text-center text-sm text-muted">{s(data.note, locale)}</p>}
         </div>
       </SectionShell>
     );
@@ -278,7 +497,7 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
     const image = await mediaFor(data.image, locale, s(data.title, locale));
     return (
       <SectionShell style={style}>
-        <div className="grid items-center gap-8 md:grid-cols-2 md:gap-14">
+        <div className="grid grid-cols-1 items-center gap-8 md:grid-cols-2 md:gap-14 [&>*]:min-w-0">
           <div className={cn(data.imageSide === "end" && "md:order-2")}>
             <Picture image={image} sizes="(min-width:768px) 50vw, 100vw" className="aspect-[4/3] rounded-[calc(var(--nq-radius)*1.4)] bg-surface" />
           </div>
@@ -385,21 +604,21 @@ const renderers: Record<string, (sec: Section, ctx: Ctx) => Promise<React.ReactN
           <h1 className="text-4xl font-semibold tracking-tight md:text-5xl">{s(data.title, locale) || t("title")}</h1>
           {s(data.subtitle, locale) && <p className="mt-3 text-lg text-muted">{s(data.subtitle, locale)}</p>}
         </div>
-        <div className="grid gap-10 lg:grid-cols-[1.2fr_1fr]">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-[1.2fr_1fr] [&>*]:min-w-0">
           {data.showForm !== false && (
             <div className="rounded-[calc(var(--nq-radius)*1.4)] border border-border bg-bg p-6 md:p-8">
               <ContactForm fields={contact.form} />
             </div>
           )}
           <div className="space-y-6">
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3 [&>*]:min-w-0">
               {channels.map((c) => {
                 const body = (
                   <>
                     <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-surface text-fg/80">{c.icon}</span>
                     <span className="min-w-0">
                       <span className="block text-xs text-muted">{c.label}</span>
-                      <span className="block truncate font-medium" dir={c.ltr ? "ltr" : undefined}>
+                      <span className="block font-medium [overflow-wrap:anywhere]" dir={c.ltr ? "ltr" : undefined}>
                         {c.value}
                       </span>
                     </span>

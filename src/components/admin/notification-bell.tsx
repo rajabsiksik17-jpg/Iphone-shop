@@ -10,6 +10,7 @@ import { useAdmin } from "./admin-context";
 import { t as tr } from "@/lib/i18n-text";
 import { cn } from "@/lib/utils";
 import { timeAgo } from "@/lib/time";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type N = { id: string; title: Record<string, string>; body: Record<string, string>; link: string | null; severity: string; createdAt: string; read: boolean };
 
@@ -90,7 +91,7 @@ export function NotificationBell() {
                     <div className="min-w-0 flex-1">
                       <p className="text-[13px] font-medium leading-snug">{tr(n.title, locale)}</p>
                       {tr(n.body, locale) && <p className="mt-0.5 line-clamp-2 text-xs text-ad-muted">{tr(n.body, locale)}</p>}
-                      <p className="mt-1 text-[11px] text-ad-muted">{timeAgo(n.createdAt, locale)}</p>
+                      <p className="mt-1 text-[11px] text-ad-muted"><TimeAgo date={n.createdAt} /></p>
                     </div>
                     {!n.read && <span className="mt-1.5 size-2 shrink-0 rounded-full bg-ad-accent" />}
                   </div>

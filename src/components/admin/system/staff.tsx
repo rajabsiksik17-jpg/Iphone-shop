@@ -15,6 +15,7 @@ import { PERMISSIONS, PERMISSION_GROUPS, type Permission } from "@/config/permis
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { StaffData } from "@/server/admin/system";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type User = StaffData["users"][number];
 type Role = StaffData["roles"][number];
@@ -148,7 +149,7 @@ export function StaffView({ data }: { data: StaffData }) {
                 ),
               },
               { key: "r", header: t("st.role"), cell: (u: User) => <Pill tone={isSuper(data.roles.find((r) => r.id === u.roleId)) ? "violet" : "neutral"}>{u.role ?? "—"}</Pill> },
-              { key: "l", header: t("st.lastLogin"), cell: (u: User) => <span className="text-ad-muted">{u.lastLoginAt ? timeAgo(u.lastLoginAt, locale) : "—"}</span> },
+              { key: "l", header: t("st.lastLogin"), cell: (u: User) => <span className="text-ad-muted">{u.lastLoginAt ? <TimeAgo date={u.lastLoginAt} /> : "—"}</span> },
               { key: "s", header: t("c.status"), cell: (u: User) => <Pill tone={u.status === "ACTIVE" ? "green" : "red"}>{u.status === "ACTIVE" ? t("c.active") : t("cu.suspended")}</Pill> },
             ]}
             mobile={(u: User) => (

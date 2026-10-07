@@ -28,7 +28,7 @@ export function AttributesManager({ data }: { data: Data }) {
   const [group, setGroup] = useState<{ id: string | null; name: Record<string, string>; icon: string | null } | null>(null);
   const [del, setDel] = useState<Row | null>(null);
   const [pending, start] = useTransition();
-  const blank = (): Form => ({ id: null, key: "", name: {}, type: "SELECT", unit: "", icon: null, groupId: null, isFilterable: true, isVariantOption: false, isVisible: true, isHighlighted: false, values: [] });
+  const blank = (): Form => ({ id: null, key: "", name: {}, type: "SELECT", unit: "", icon: null, groupId: null, isFilterable: true, isVariantOption: false, isVisible: true, isHighlighted: false, showOnCard: false, values: [] });
 
   const save = () =>
     form &&
@@ -174,6 +174,7 @@ export function AttributesManager({ data }: { data: Data }) {
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
               <Switch checked={form.isFilterable} onCheckedChange={(v) => setForm({ ...form, isFilterable: v })} label={t("attr.filterable")} />
+              <Switch checked={form.showOnCard} onCheckedChange={(v) => setForm({ ...form, showOnCard: v })} label={locale === "ar" ? "يظهر على بطاقة المنتج" : "Show on product cards"} description={locale === "ar" ? "مواصفة مختصرة تحت اسم المنتج (مثل السعة أو المقاس)" : "A short spec under the product name (e.g. storage or size)"} />
               <Switch checked={form.isVariantOption} onCheckedChange={(v) => setForm({ ...form, isVariantOption: v })} label={t("attr.variantOption")} />
               <Switch checked={form.isVisible} onCheckedChange={(v) => setForm({ ...form, isVisible: v })} label={t("attr.visible")} />
               <Switch

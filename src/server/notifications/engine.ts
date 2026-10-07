@@ -1,4 +1,5 @@
 import "server-only";
+import { paymentMethodTitle } from "../integrations/registry";
 import { db } from "../db";
 import { env } from "../env";
 import { logger } from "../logger";
@@ -78,7 +79,7 @@ const builders: { [E in NotificationEventKey]?: Builder<E> } = {
       event: "ORDER_PAID",
       permission: "orders.view",
       title: L(`Payment received · ${o.number}`, `تم استلام الدفعة · ${o.number}`),
-      body: L(`${amount} via ${o.paymentMethod}`, `${await formatBase(o.total, "ar")} عبر ${o.paymentMethod}`),
+      body: L(`${amount} via ${paymentMethodTitle(o.paymentMethod, null, "en")}`, `${await formatBase(o.total, "ar")} عبر ${paymentMethodTitle(o.paymentMethod, null, "ar")}`),
       link: `/admin/orders/${o.id}`,
       entityType: "order",
       entityId: o.id,

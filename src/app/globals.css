@@ -181,6 +181,7 @@ html.ad-dark {
   margin-top: 1em;
 }
 .prose-store h2 {
+  scroll-margin-top: 8rem;
   font-size: 1.35rem;
   font-weight: 650;
   margin-top: 1.8em;

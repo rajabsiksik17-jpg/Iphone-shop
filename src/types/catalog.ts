@@ -39,6 +39,8 @@ export type ProductCardDTO = {
   /** Present when a single-click add-to-cart is possible. */
   quickAdd: boolean;
   swatches: { label: string; hex: string; image: ImageDTO | null }[];
+  /** Key specs chosen by the store type (e.g. storage, RAM; size, material). */
+  cardSpecs: string[];
   /** For analytics events. */
   category: string | null;
 };

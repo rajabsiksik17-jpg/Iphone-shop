@@ -2,8 +2,10 @@
 
 import { z } from "zod";
 import { db } from "@/server/db";
-import { moderateReview, setCustomerStatus, adjustPoints, saveCoupon, deleteCoupon } from "@/server/admin/operations";
+import { moderateReview, setCustomerStatus, adjustPoints, saveCoupon, deleteCoupon, customerDetail } from "@/server/admin/operations";
+import { AppError } from "@/server/errors";
 import { audit } from "@/server/audit";
+import { bulkCoupons } from "@/server/admin/bulk";
 import { adminRun } from "./_base";
 import { idSchema } from "../helpers";
 
@@ -40,4 +42,21 @@ export async function unsubscribeAction(id: string) {
     const sub = await db.newsletterSubscriber.update({ where: { id: idSchema.parse(id) }, data: { status: "unsubscribed", unsubscribedAt: new Date() } });
     await audit({ actor: s, action: "newsletter.unsubscribed", summary: sub.email });
   });
+}
+
+/** Customer profile for the customers drawer (loaded on demand). */
+export async function customerDrawerAction(id: string, locale: string) {
+  return adminRun(
+    "customers.view",
+    async (staff) => {
+      const c = await customerDetail(idSchema.parse(id), staff, z.enum(["ar", "en"]).parse(locale));
+      if (!c) throw new AppError("not_found", 404);
+      return c;
+    },
+    { revalidate: false },
+  );
+}
+
+export async function bulkCouponsAction(ids: string[], op: "activate" | "deactivate" | "delete") {
+  return adminRun("marketing.manage", (s) => bulkCoupons(ids, op, s));
 }

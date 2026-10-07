@@ -115,6 +115,7 @@ export function ProductCard({ product, priority, sizes = "(min-width:1280px) 22v
             {product.name}
           </Link>
         </h3>
+        {product.cardSpecs.length > 0 && <p className="mt-1 truncate text-xs text-muted">{product.cardSpecs.join(" · ")}</p>}
         {card.showRating && product.ratingCount > 0 && <RatingSummary value={product.rating} count={product.ratingCount} className="mt-1.5" countLabel={t("reviewsCount", { count: product.ratingCount })} />}
         <div className="mt-auto flex flex-col-reverse gap-1.5 pt-2 sm:flex-row sm:items-end sm:justify-between sm:gap-2">
           <Price price={product.price} size="md" />

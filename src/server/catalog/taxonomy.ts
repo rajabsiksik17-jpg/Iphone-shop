@@ -20,10 +20,43 @@ export type CategoryNode = {
   icon: string | null;
   image: ImageDTO | null;
   isFeatured: boolean;
+  /** Visible products in this category or any subcategory (each product counted once). */
+  productCount: number;
 };
 
+let countsCache: { at: number; map: Map<string, number> } | null = null;
+const COUNTS_TTL = 60_000;
+
+/**
+ * Product counts per category, rolled up through the materialised path so a
+ * parent includes its whole subtree without double-counting products filed in
+ * several of its children. One grouped query, cached briefly per process — the
+ * menus never load product rows.
+ */
+export async function categoryProductCounts(): Promise<Map<string, number>> {
+  if (countsCache && Date.now() - countsCache.at < COUNTS_TTL) return countsCache.map;
+  const rows = await db.$queryRaw<{ id: string; n: number }[]>`
+    SELECT c.id, COUNT(DISTINCT p.id)::int AS n
+    FROM "Category" c
+    JOIN "Category" d ON d.path LIKE c.path || '%'
+    JOIN "ProductCategory" pc ON pc."categoryId" = d.id
+    JOIN "Product" p ON p.id = pc."productId"
+    WHERE p.status = 'ACTIVE'
+      AND p.visibility IN ('VISIBLE', 'CATALOG_ONLY')
+      AND (p."publishedAt" IS NULL OR p."publishedAt" <= now())
+    GROUP BY c.id`;
+  const map = new Map(rows.map((r) => [r.id, r.n]));
+  countsCache = { at: Date.now(), map };
+  return map;
+}
+
+/** Drop cached counts (after catalogue changes in admin). */
+export function invalidateCategoryCounts() {
+  countsCache = null;
+}
+
 export const categoryTree = cache(async (locale: string): Promise<Tree<CategoryNode>[]> => {
-  const rows = await db.category.findMany({ where: { isActive: true }, include: { image: true }, orderBy: { position: "asc" } });
+  const [rows, counts] = await Promise.all([db.category.findMany({ where: { isActive: true }, include: { image: true }, orderBy: { position: "asc" } }), categoryProductCounts()]);
   // Drop subtrees whose ancestor is inactive.
   const activeIds = new Set(rows.map((r) => r.id));
   const visible = rows.filter((r) => r.path.split("/").filter(Boolean).every((id) => activeIds.has(id)));
@@ -38,6 +71,7 @@ export const categoryTree = cache(async (locale: string): Promise<Tree<CategoryN
       icon: r.icon,
       image: imageDTO(r.image, locale, t(r.name, locale)),
       isFeatured: r.isFeatured,
+      productCount: counts.get(r.id) ?? 0,
     })),
   );
 });
@@ -206,11 +240,28 @@ export const categoryRail = cache(async (categoryId: string, locale: string): Pr
     const p = await db.category.findUnique({ where: { id: current.parentId }, select: { name: true, fullSlug: true } });
     parent = p ? { name: t(p.name, locale), fullSlug: p.fullSlug } : null;
   }
-  const counts = await Promise.all(rows.map((r) => db.product.count({ where: { ...visibleWhere(), categories: { some: { category: { path: { startsWith: r.path } } } } } })));
+  const counts = await categoryProductCounts();
   return {
     parent,
     items: rows
-      .map((r, i) => ({ id: r.id, fullSlug: r.fullSlug, name: t(r.name, locale), icon: r.icon, image: imageDTO(r.image, locale, t(r.name, locale)), count: counts[i], current: r.id === current.id }))
+      .map((r) => ({ id: r.id, fullSlug: r.fullSlug, name: t(r.name, locale), icon: r.icon, image: imageDTO(r.image, locale, t(r.name, locale)), count: counts.get(r.id) ?? 0, current: r.id === current.id }))
       .filter((r) => r.count > 0 || r.current),
   };
+});
+
+/**
+ * Categories to suggest when a listing has few or no products: siblings of the
+ * current category that have products, falling back to top-level categories.
+ */
+export const exploreCategories = cache(async (locale: string, currentId?: string): Promise<RailItem[]> => {
+  const tree = await categoryTree(locale);
+  const flat: { node: Tree<CategoryNode>; parentId: string | null }[] = [];
+  const walk = (nodes: Tree<CategoryNode>[]) => nodes.forEach((n) => (flat.push({ node: n, parentId: n.parentId }), walk(n.children)));
+  walk(tree);
+  const current = currentId ? flat.find((f) => f.node.id === currentId) : undefined;
+  const siblings = current ? flat.filter((f) => f.parentId === current.parentId && f.node.id !== currentId) : [];
+  const pick = (list: Tree<CategoryNode>[]) => list.filter((n) => n.productCount > 0 && n.id !== currentId && !current?.node.fullSlug.startsWith(n.fullSlug + "/"));
+  let items = pick(siblings.map((s) => s.node));
+  if (items.length < 3) items = [...items, ...pick(tree).filter((n) => !items.some((i) => i.id === n.id))];
+  return items.slice(0, 8).map((n) => ({ id: n.id, fullSlug: n.fullSlug, name: n.name, icon: n.icon, image: n.image, count: n.productCount, current: false }));
 });

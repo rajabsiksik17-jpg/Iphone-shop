@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Script from "next/script";
+import { ADMIN_MODE_BOOT } from "@/lib/admin-mode-boot";
 import type { Viewport } from "next";
 import { notFound } from "next/navigation";
 import { NextIntlClientProvider, hasLocale } from "next-intl";
@@ -44,6 +46,10 @@ export default async function LocaleLayout({ children, params }: { children: Rea
     <html lang={locale} dir={meta.dir} className={cn(geist.variable, plexArabic.variable, inter.variable, manrope.variable, dmSans.variable, kufi.variable, tajawal.variable, cairo.variable)} suppressHydrationWarning>
       <head>
         <style id="nq-theme" dangerouslySetInnerHTML={{ __html: themeCss(appearance) }} />
+        {/* Admin URLs: apply admin tokens + saved theme before first paint (no flash). */}
+        <Script id="nq-admin-mode" strategy="beforeInteractive">
+          {ADMIN_MODE_BOOT}
+        </Script>
       </head>
       <body className="min-h-dvh">
         <NextIntlClientProvider>

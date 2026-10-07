@@ -19,11 +19,13 @@ import { SYSTEM_ROLES } from "../src/config/permissions";
 import { EMAIL_TEMPLATES } from "../src/server/email/defaults";
 import { INTEGRATIONS } from "../src/server/integrations/registry";
 import { initialSectionData } from "../src/cms/sections";
+import { aboutSections, contactSections } from "../src/server/setup/pages";
 import { buildFullSlug, buildPath, depthOf } from "../src/lib/category-tree";
 import { ATTRIBUTES, ATTRIBUTE_GROUPS, BRANDS, CATEGORIES, COLORS, PRODUCTS, type CategoryDef } from "./seed/catalog-data";
 import { ABOUT, ANNOUNCEMENTS, FAQS, FAQ_CATEGORIES, LEGAL_PAGES, SOCIAL_PLATFORMS } from "./seed/content-data";
 import { CURRENCY_CATALOG } from "../src/config/currencies";
-import { buildDefaultNavigation } from "../src/server/setup/navigation";
+import { BANK_INSTRUCTIONS } from "../scripts/content-pairs";
+import { buildDefaultNavigation, NAV_VERSION } from "../src/server/setup/navigation";
 import { brandLogo, categoryArt, productArt, slideArt, bannerArt, type DeviceKind } from "./seed/art";
 
 const L = (en: string, ar: string) => ({ en, ar });
@@ -90,8 +92,8 @@ async function essentials() {
         config:
           def.key === "bank_transfer"
             ? {
-                instructions_en: "Transfer the order total to Nuqta Trading LLC — IBAN JO00 XXXX 0000 0000 0000 0000 0000 00, or CliQ alias NUQTA. Use your order number as the reference.",
-                instructions_ar: "حوّل قيمة الطلب إلى شركة نقطة للتجارة — IBAN JO00 XXXX 0000 0000 0000 0000 0000 00 أو عبر كليك على الاسم NUQTA. استخدم رقم الطلب كمرجع.",
+                instructions_en: BANK_INSTRUCTIONS.en,
+                instructions_ar: BANK_INSTRUCTIONS.ar,
               }
             : def.key === "cod"
               ? { instructions_en: "Pay the courier in cash when your order arrives.", instructions_ar: "ادفع للمندوب نقداً عند وصول طلبك." }
@@ -388,22 +390,11 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
       template: "standard",
       title: ABOUT.title,
       system: true,
-      sections: [
-        section("image_text", { image: { id: aboutImg.id, url: aboutImg.url }, eyebrow: ABOUT.eyebrow, title: ABOUT.heading, body: ABOUT.body, imageSide: "end" }),
-        section("features", {
-          title: L("What we stand for", "ما نؤمن به"),
-          items: [
-            { icon: "BadgeCheck", title: L("Only genuine", "الأصلي فقط"), text: L("Every product from official channels.", "كل منتج من القنوات الرسمية.") },
-            { icon: "Scale", title: L("Honest prices", "أسعار عادلة"), text: L("No inflated 'was' prices — real discounts only.", "لا أسعار مضخمة — خصومات حقيقية فقط.") },
-            { icon: "HeartHandshake", title: L("Support that cares", "دعم يهتم"), text: L("Before and long after you buy.", "قبل الشراء وبعده بفترة طويلة.") },
-          ],
-        }),
-        section("cta", { title: L("Questions about a device?", "لديك سؤال عن جهاز؟"), subtitle: L("Our team is a message away.", "فريقنا على بُعد رسالة."), cta: L("Contact us", "تواصل معنا"), href: "/contact" }, { background: "surface", align: "center" }),
-      ],
+      sections: aboutSections({ id: aboutImg.id, url: aboutImg.url }, { eyebrow: ABOUT.eyebrow, heading: ABOUT.heading, body: ABOUT.body }),
     },
-    { slug: "contact", template: "contact", title: L("Contact us", "تواصل معنا"), system: true, sections: [section("contact")] },
+    { slug: "contact", template: "contact", title: L("Contact us", "تواصل معنا"), system: true, sections: contactSections() },
     { slug: "faq", template: "faq", title: L("Help & FAQ", "المساعدة والأسئلة الشائعة"), system: true, sections: [section("faq", { title: L("How can we help?", "كيف يمكننا مساعدتك؟") }), section("cta", { title: L("Still need help?", "ما زلت بحاجة لمساعدة؟"), cta: L("Contact support", "تواصل مع الدعم"), href: "/contact" }, { background: "surface", align: "center" })] },
-    ...Object.entries(LEGAL_PAGES).map(([slug, p]) => ({ slug, template: "legal", title: p.title, system: true, sections: [section("rich_text", { body: p.body })] })),
+    ...Object.entries(LEGAL_PAGES).map(([slug, p]) => ({ slug, template: "legal", title: p.title, excerpt: p.excerpt, system: true, sections: [section("rich_text", { body: p.body })] })),
   ];
   const pageIds = new Map<string, string>();
   for (const p of pages) {
@@ -412,6 +403,7 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
         slug: p.slug,
         template: p.template,
         title: p.title,
+        excerpt: ("excerpt" in p && p.excerpt) || {},
         status: "PUBLISHED",
         isSystem: p.system ?? false,
         publishedAt: new Date(),
@@ -424,6 +416,7 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
   // Menus
   // Header + top bar: shared defaults (mega menus fill themselves from the category tree).
   await buildDefaultNavigation();
+  await db.setting.upsert({ where: { key: "_content_upgrades" }, create: { key: "_content_upgrades", value: { nav: NAV_VERSION } }, update: { value: { nav: NAV_VERSION } } });
   const item = (menuId: string, data: { label?: object; type: "URL" | "CATEGORY" | "PAGE" | "SHOP" | "BRAND"; refId?: string; url?: string; position: number; parentId?: string; highlight?: boolean }) =>
     db.menuItem.create({ data: { menuId, label: data.label ?? {}, type: data.type, refId: data.refId, url: data.url, position: data.position, parentId: data.parentId, highlight: data.highlight ?? false } });
 
@@ -439,7 +432,7 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
   await item(fCompany.id, { type: "PAGE", refId: pageIds.get("about"), position: 0 });
   await item(fCompany.id, { type: "URL", url: "/brands", label: L("Our brands", "علاماتنا التجارية"), position: 1 });
   const fLegal = await db.menu.create({ data: { key: "footer-legal", name: "Footer · Legal" } });
-  for (const [i, s] of ["privacy", "terms", "cookies"].entries()) await item(fLegal.id, { type: "PAGE", refId: pageIds.get(s), position: i });
+  for (const [i, s] of ["privacy-policy", "terms-and-conditions", "cookie-policy"].entries()) await item(fLegal.id, { type: "PAGE", refId: pageIds.get(s), position: i });
 
   // Shipping
   const sa = await db.shippingZone.create({ data: { name: "Saudi Arabia", countries: ["SA"], position: 0 } });

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
-import { Plus, Star, Copy, Trash2, Eye, MoreHorizontal, Pencil } from "lucide-react";
+import { Plus, Star, Copy, Trash2, Eye, MoreHorizontal, Pencil, ExternalLink, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Link, usePathname, useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -11,15 +11,22 @@ import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/comp
 import { useAdmin } from "../admin-context";
 import { PageHeader, Panel, DataTable, FilterTabs, SearchBox, Pager, Pill, BulkBar, ConfirmDialog, AdminEmpty } from "../ui";
 import { Select, Label, TextInput } from "../fields";
-import { bulkProductsAction, duplicateProductAction, deleteProductsAction } from "@/actions/admin/products";
-import type { listAdminProducts } from "@/server/admin/products";
+import { cn } from "@/lib/utils";
+import { bulkProductsAction, bulkProductsMatchingAction, deleteProductsMatchingAction, duplicateProductAction, deleteProductsAction, productDrawerAction, quickUpdateProductAction } from "@/actions/admin/products";
+import { AdminDrawer, DrawerSkeleton, useDrawerParam } from "../drawer";
+import { InlineEdit } from "../inline-edit";
+import { ProductEditor } from "./editor";
+import { timeAgo } from "@/lib/time";
+import type { listAdminProducts, ProductEditorData } from "@/server/admin/products";
+import { TimeAgo } from "@/components/ui/time-ago";
+import { useLiveRefresh } from "../use-live-refresh";
 
 type Data = Awaited<ReturnType<typeof listAdminProducts>>;
 
 export const STOCK_TONE = { IN_STOCK: "green", LOW_STOCK: "amber", OUT_OF_STOCK: "red", BACKORDER: "blue", PREORDER: "violet" } as const;
 
 export function ProductsList({ data }: { data: Data }) {
-  const { t, fmt, locale, can } = useAdmin();
+  const { t, fmt, locale, can, money } = useAdmin();
   const router = useRouter();
   const sp = useSearchParams();
   const pathname = usePathname();
@@ -28,6 +35,69 @@ export function ProductsList({ data }: { data: Data }) {
   const [dialog, setDialog] = useState<null | "category" | "brand" | "price" | "sale" | "stock" | "delete">(null);
   const [val, setVal] = useState<{ categoryId: string; brandId: string; percent: number; stock: number }>({ categoryId: "", brandId: "", percent: 10, stock: 0 });
   const ids = [...selected];
+  // "Select all N matching": bulk actions then target the current filters, not just this page.
+  const [allMatching, setAllMatching] = useState(false);
+  useEffect(() => {
+    if (selected.size === 0) setAllMatching(false);
+  }, [selected]);
+  const count = allMatching ? data.total : ids.length;
+  const filter = Object.fromEntries(["q", "status", "brand", "category", "stock"].flatMap((k) => (sp.get(k) ? [[k, sp.get(k)!]] : [])));
+  const editable = can("catalog.edit");
+  const ar = locale === "ar";
+  const dec = money.base.decimals;
+
+  // Optimistic row patches from inline edits, dropped when fresh server data arrives.
+  const [patches, setPatches] = useState<Record<string, Partial<Data["rows"][number]>>>({});
+  useEffect(() => setPatches({}), [data]);
+  const rows = data.rows.map((r) => (patches[r.id] ? { ...r, ...patches[r.id] } : r));
+
+  // Product drawer (?product=<id> | new).
+  const drawer = useDrawerParam("product");
+  const [editor, setEditor] = useState<{ id: string; data: ProductEditorData; v: number } | null>(null);
+  const dirty = useRef(false);
+  const seq = useRef(0);
+  const load = useCallback(
+    async (id: string) => {
+      const n = ++seq.current;
+      const r = await productDrawerAction(id, locale);
+      if (n !== seq.current) return;
+      if (r.ok) setEditor({ id, data: r.data, v: n });
+      else {
+        toast.error(t("c.error"));
+        drawer.close();
+      }
+    },
+    [locale, t, drawer],
+  );
+  useEffect(() => {
+    if (!drawer.value) return;
+    dirty.current = false;
+    void load(drawer.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer.value]);
+  // Realtime: stock changes (orders, other admins) and reviews update the table without a reload.
+  useLiveRefresh(["inventory", "reviews"]);
+  const context = [t("p.title"), ...(sp.get("status") ? [sp.get("status") === "ACTIVE" ? t("c.published") : sp.get("status") === "DRAFT" ? t("c.draft") : t("c.archived")] : []), ...(sp.get("q") ? [`“${sp.get("q")}”`] : [])];
+
+  /** Inline edit → server; patches the row optimistically and reports success for rollback. */
+  const quick = async (r: Data["rows"][number], patch: Record<string, unknown>, optimistic: Partial<Data["rows"][number]>) => {
+    setPatches((ps) => ({ ...ps, [r.id]: { ...ps[r.id], ...optimistic } }));
+    const res = await quickUpdateProductAction(r.id, patch);
+    if (res.ok) {
+      setPatches((ps) => ({ ...ps, [r.id]: { ...ps[r.id], price: res.data.effectivePrice, maxPrice: res.data.maxPrice, basePrice: res.data.price, salePrice: res.data.salePrice, onSale: res.data.onSale, stock: res.data.stock, stockStatus: res.data.stockStatus, status: res.data.status } }));
+      router.refresh();
+      return true;
+    }
+    setPatches((ps) => {
+      const n = { ...ps };
+      delete n[r.id];
+      return n;
+    });
+    toast.error(res.error === "variable_use_editor" ? (ar ? "منتج بخيارات — عدّل السعر والمخزون لكل خيار من المحرر" : "Product has variations — edit price and stock per variation in the editor") : res.fieldErrors?.salePrice ? (ar ? "سعر التخفيض يجب أن يكون أقل من السعر" : "Sale price must be lower than the price") : t("c.error"));
+    return false;
+  };
+  const toMinor = (v: string) => Math.round(Number(v.replace(/[^\d.]/g, "")) * 10 ** dec);
+  const toMajor = (n: number) => (n / 10 ** dec).toFixed(dec);
 
   const setParam = (k: string, v: string) => {
     const p = new URLSearchParams(sp.toString());
@@ -39,17 +109,64 @@ export function ProductsList({ data }: { data: Data }) {
 
   const bulk = (op: Record<string, unknown>) =>
     start(async () => {
-      const r = await bulkProductsAction(ids, op);
+      const r = allMatching ? await bulkProductsMatchingAction(filter, op) : await bulkProductsAction(ids, op);
       if (r.ok) {
-        toast.success(t("p.bulk.done", { n: ids.length }));
+        toast.success(t("p.bulk.done", { n: count }));
+        setAllMatching(false);
         setSelected(new Set());
         setDialog(null);
         router.refresh();
       } else toast.error(t("c.error"));
     });
 
+  const statusLabel = (s: string) => t(s === "ACTIVE" ? "c.published" : s === "DRAFT" ? "c.draft" : "c.archived");
+  const statusCell = (r: Data["rows"][number]) =>
+    editable ? (
+      <Dropdown>
+        <DropdownTrigger className="group inline-flex items-center gap-1 rounded-full" aria-label={`${t("c.status")}: ${statusLabel(r.status)}`}>
+          {statusPill(r.status)}
+          <ChevronDown className="size-3.5 text-ad-muted opacity-0 transition group-hover:opacity-100" />
+        </DropdownTrigger>
+        <DropdownContent align="start">
+          {(["ACTIVE", "DRAFT", "ARCHIVED"] as const).map((st) => (
+            <DropdownItem key={st} onSelect={() => st !== r.status && void quick(r, { status: st }, { status: st })} className={cn(st === r.status && "font-semibold")}>
+              {statusLabel(st)}
+            </DropdownItem>
+          ))}
+        </DropdownContent>
+      </Dropdown>
+    ) : (
+      statusPill(r.status)
+    );
   const statusPill = (s: string) => <Pill tone={s === "ACTIVE" ? "green" : s === "DRAFT" ? "neutral" : "amber"}>{t(s === "ACTIVE" ? "c.published" : s === "DRAFT" ? "c.draft" : "c.archived")}</Pill>;
-  const stockCell = (r: Data["rows"][number]) => (!r.trackInventory ? <span className="text-ad-muted">∞</span> : <Pill tone={STOCK_TONE[r.stockStatus as keyof typeof STOCK_TONE]}>{r.stock}</Pill>);
+  const stockPill = (r: Data["rows"][number]) => (!r.trackInventory ? <span className="text-ad-muted">∞</span> : <Pill tone={STOCK_TONE[r.stockStatus as keyof typeof STOCK_TONE]}>{r.stock}</Pill>);
+  // Simple products: stock is edited inline. Variable products show the total (edited per variation in the drawer).
+  const stockCell = (r: Data["rows"][number]) =>
+    editable && r.type === "SIMPLE" && r.trackInventory ? (
+      <InlineEdit value={String(r.stock)} display={stockPill(r)} type="number" min={0} step={1} label={t("p.stock")} inputClassName="w-20" onSave={(v) => quick(r, { stock: Math.max(0, Math.round(Number(v))) }, { stock: Math.max(0, Math.round(Number(v))) })} />
+    ) : (
+      stockPill(r)
+    );
+  const priceEdit = (r: Data["rows"][number]) =>
+    editable && r.type === "SIMPLE" ? (
+      <div className="flex flex-col items-end gap-0.5">
+        <InlineEdit value={toMajor(r.basePrice)} display={<span className={cn("tabular", r.onSale && "text-ad-muted line-through")}>{fmt(r.basePrice)}</span>} type="number" min={0} step="any" dir="ltr" label={t("p.price")} inputClassName="w-28 text-end" onSave={(v) => quick(r, { price: toMinor(v) }, {})} />
+        <InlineEdit
+          value={r.salePrice != null ? toMajor(r.salePrice) : ""}
+          display={r.salePrice != null ? <span className="tabular font-medium text-red-600">{fmt(r.salePrice)}</span> : <span className="text-xs text-ad-muted">{ar ? "+ سعر تخفيض" : "+ sale price"}</span>}
+          type="number"
+          min={0}
+          step="any"
+          dir="ltr"
+          placeholder={ar ? "فارغ = بدون" : "empty = none"}
+          label={ar ? "سعر التخفيض" : "Sale price"}
+          inputClassName="w-28 text-end"
+          onSave={(v) => quick(r, { salePrice: v.trim() ? toMinor(v) : null }, {})}
+        />
+      </div>
+    ) : (
+      priceCell(r)
+    );
   const priceCell = (r: Data["rows"][number]) => (
     <span className="tabular whitespace-nowrap">
       {r.price !== r.maxPrice ? `${fmt(r.price)} – ${fmt(r.maxPrice)}` : fmt(r.price)}
@@ -63,9 +180,12 @@ export function ProductsList({ data }: { data: Data }) {
         <MoreHorizontal className="size-4" />
       </DropdownTrigger>
       <DropdownContent>
+        <DropdownItem onSelect={() => drawer.open(r.id)}>
+          <Pencil /> {t("c.edit")}
+        </DropdownItem>
         <DropdownItem asChild>
           <Link href={`/admin/products/${r.id}`}>
-            <Pencil /> {t("c.edit")}
+            <ExternalLink /> {ar ? "فتح المحرر الكامل" : "Open full editor"}
           </Link>
         </DropdownItem>
         <DropdownItem asChild>
@@ -80,7 +200,8 @@ export function ProductsList({ data }: { data: Data }) {
                 const res = await duplicateProductAction(r.id);
                 if (res.ok) {
                   toast.success(t("c.duplicated"));
-                  router.push(`/admin/products/${res.data.id}`);
+                  router.refresh();
+                  drawer.open(res.data.id);
                 }
               })
             }
@@ -103,8 +224,8 @@ export function ProductsList({ data }: { data: Data }) {
         title={t("p.title")}
         actions={
           can("catalog.edit") && (
-            <Button asChild size="sm" leftIcon={<Plus />}>
-              <Link href="/admin/products/new">{t("p.new")}</Link>
+            <Button size="sm" leftIcon={<Plus />} onClick={() => drawer.open("new")}>
+              {t("p.new")}
             </Button>
           )
         }
@@ -158,12 +279,15 @@ export function ProductsList({ data }: { data: Data }) {
           </div>
         </div>
         <DataTable
-          rows={data.rows}
-          href={(r) => `/admin/products/${r.id}`}
+          rows={rows}
+          onRowClick={(r) => drawer.open(r.id)}
           selectable={can("catalog.edit")}
           selected={selected}
           onSelectedChange={setSelected}
-          empty={<AdminEmpty action={can("catalog.edit") ? <Button asChild size="sm"><Link href="/admin/products/new">{t("p.new")}</Link></Button> : undefined} />}
+          total={data.total}
+          allMatching={allMatching}
+          onAllMatchingChange={setAllMatching}
+          empty={<AdminEmpty action={can("catalog.edit") ? <Button size="sm" onClick={() => drawer.open("new")}>{t("p.new")}</Button> : undefined} />}
           columns={[
             {
               key: "name",
@@ -172,19 +296,39 @@ export function ProductsList({ data }: { data: Data }) {
                 <div className="flex max-w-[22rem] items-center gap-3">
                   {r.image ? <img src={r.image} alt="" className="size-10 shrink-0 rounded-lg bg-ad-sunken object-cover" /> : <span className="size-10 shrink-0 rounded-lg bg-ad-sunken" />}
                   <div className="min-w-0">
-                    <p className="flex items-center gap-1.5 truncate font-medium">
+                    <p className={cn("flex items-center gap-1.5 truncate font-medium", drawer.value === r.id && "text-ad-accent")}>
                       {r.name}
                       {r.isFeatured && <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" />}
                     </p>
-                    <p className="truncate text-xs text-ad-muted">{[r.brand, r.sku, r.type === "VARIABLE" ? t("p.variantsCount", { n: r.variants }) : null].filter(Boolean).join(" · ")}</p>
+                    <p className="truncate text-xs text-ad-muted">{[r.brand, r.category, r.type === "VARIABLE" ? t("p.variantsCount", { n: r.variants }) : null].filter(Boolean).join(" · ")}</p>
                   </div>
                 </div>
               ),
             },
-            { key: "status", header: t("c.status"), cell: (r) => statusPill(r.status) },
+            { key: "sku", header: "SKU", className: "max-xl:hidden", cell: (r) => <span className="font-mono text-xs text-ad-muted">{r.sku || "—"}</span> },
+            { key: "price", header: t("p.price"), align: "end", cell: priceEdit },
             { key: "stock", header: t("p.stock"), cell: stockCell },
-            { key: "price", header: t("p.price"), align: "end", cell: priceCell },
-            { key: "menu", header: "", className: "w-10", cell: rowMenu },
+            { key: "status", header: t("c.status"), cell: statusCell },
+            {
+              key: "rating",
+              header: ar ? "التقييم" : "Rating",
+              className: "max-2xl:hidden",
+              cell: (r) => (r.reviews ? <span className="whitespace-nowrap text-xs"><Star className="me-1 inline size-3.5 fill-amber-400 text-amber-400" />{r.rating.toFixed(1)} <span className="text-ad-muted">({r.reviews})</span></span> : <span className="text-xs text-ad-muted">—</span>),
+            },
+            { key: "updated", header: ar ? "آخر تعديل" : "Updated", className: "max-2xl:hidden", cell: (r) => <span className="whitespace-nowrap text-xs text-ad-muted"><TimeAgo date={r.updatedAt} /></span> },
+            {
+              key: "menu",
+              header: <span className="sr-only">{t("c.actions")}</span>,
+              align: "end",
+              cell: (r) => (
+                <div className="flex items-center justify-end gap-1">
+                  <button type="button" onClick={() => drawer.open(r.id)} className="grid size-8 place-items-center rounded-lg text-ad-muted transition hover:bg-ad-hover hover:text-ad-fg" aria-label={`${t("c.edit")} ${r.name}`}>
+                    <Pencil className="size-4" />
+                  </button>
+                  {rowMenu(r)}
+                </div>
+              ),
+            },
           ]}
           mobile={(r) => (
             <div className="flex items-center gap-3">
@@ -203,7 +347,7 @@ export function ProductsList({ data }: { data: Data }) {
         <Pager page={data.page} pageCount={data.pageCount} total={data.total} />
       </Panel>
 
-      <BulkBar count={selected.size} onClear={() => setSelected(new Set())}>
+      <BulkBar count={count} onClear={() => (setSelected(new Set()), setAllMatching(false))}>
         <Button size="xs" variant="outline" loading={pending} onClick={() => bulk({ op: "publish" })}>
           {t("p.bulk.publish")}
         </Button>
@@ -230,7 +374,7 @@ export function ProductsList({ data }: { data: Data }) {
         </Dropdown>
       </BulkBar>
 
-      <Modal open={dialog === "category" || dialog === "brand" || dialog === "price" || dialog === "sale" || dialog === "stock"} onOpenChange={(o) => !o && setDialog(null)} title={dialog ? t(`p.bulk.${dialog}` as "p.bulk.price") : ""} description={t("c.selected", { n: selected.size })}>
+      <Modal open={dialog === "category" || dialog === "brand" || dialog === "price" || dialog === "sale" || dialog === "stock"} onOpenChange={(o) => !o && setDialog(null)} title={dialog ? t(`p.bulk.${dialog}` as "p.bulk.price") : ""} description={t("c.selected", { n: count })}>
         <div className="space-y-4">
           {dialog === "category" && (
             <Select value={val.categoryId} onChange={(e) => setVal({ ...val, categoryId: e.target.value })}>
@@ -285,11 +429,11 @@ export function ProductsList({ data }: { data: Data }) {
       <ConfirmDialog
         open={dialog === "delete"}
         onOpenChange={(o) => !o && setDialog(null)}
-        title={t("c.confirmDelete")}
+        title={ar ? `حذف ${count} منتج؟` : `Delete ${count} product${count === 1 ? "" : "s"}?`}
         text={t("p.deleteHasOrders")}
         confirmLabel={t("c.delete")}
         onConfirm={async () => {
-          const r = await deleteProductsAction(ids);
+          const r = allMatching ? await deleteProductsMatchingAction(filter) : await deleteProductsAction(ids);
           if (r.ok) {
             toast.success(t("c.deleted"));
             setSelected(new Set());
@@ -297,6 +441,31 @@ export function ProductsList({ data }: { data: Data }) {
           }
         }}
       />
+
+      <AdminDrawer
+        open={Boolean(drawer.value)}
+        onOpenChange={(o) => !o && drawer.close()}
+        size="xl"
+        label={t("p.title")}
+        canClose={() => !dirty.current || window.confirm(t("c.unsaved"))}
+      >
+        {editor && (editor.id === drawer.value || !drawer.value) ? (
+          <ProductEditor
+            key={`${editor.id}-${editor.v}`}
+            data={editor.data}
+            layout="drawer"
+            context={context}
+            onDirtyChange={(d) => {
+              dirty.current = d;
+            }}
+            onSaved={() => drawer.value && drawer.value !== "new" && void load(drawer.value)}
+            onClose={() => ((dirty.current = false), drawer.close())}
+            onOpen={(id) => drawer.open(id)}
+          />
+        ) : (
+          <DrawerSkeleton />
+        )}
+      </AdminDrawer>
     </>
   );
 }

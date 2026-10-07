@@ -23,7 +23,7 @@ export default async function ConversationsPage({ params }: { params: Promise<{ 
             <div className="min-w-0">
               <p className="truncate font-medium">{c.subject}</p>
               <p className="text-xs text-muted">
-                {c.createdAt.toLocaleString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}
+                {c.createdAt.toLocaleString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}
                 {c.assignedAgent ? ` · ${c.assignedAgent.name}` : ""}
               </p>
             </div>

@@ -1,3 +1,4 @@
+import { PRIVACY_PAGE, TERMS_PAGE } from "./legal-content";
 /** Demo/starter content. Legal texts are starting templates — have them reviewed for your business. */
 const L = (en: string, ar: string) => ({ en, ar });
 
@@ -5,7 +6,7 @@ export const ANNOUNCEMENTS = [
   { text: L("Free delivery across Saudi Arabia on orders over 299 SAR", "توصيل مجاني لجميع مناطق المملكة للطلبات فوق 299 ريال"), icon: "Truck", url: "/shipping-policy" },
   { text: L("iPhone 17 Pro is here — order today, delivered tomorrow in Riyadh", "وصل آيفون 17 برو — اطلب اليوم واستلم غداً في الرياض"), icon: "Sparkles", url: "/product/iphone-17-pro" },
   { text: L("Genuine products with official local warranty", "منتجات أصلية مع كفالة محلية رسمية"), icon: "ShieldCheck" },
-  { text: L("Pay cash on delivery, by card or CliQ", "ادفع نقداً عند الاستلام أو بالبطاقة أو عبر كليك"), icon: "CreditCard" },
+  { text: L("Pay cash on delivery, by mada card or bank transfer", "ادفع نقداً عند الاستلام أو ببطاقة مدى أو بالتحويل البنكي"), icon: "CreditCard" },
   { text: L("14-day hassle-free returns", "إرجاع سهل خلال 14 يوماً"), icon: "RotateCcw", url: "/refund-policy" },
 ];
 
@@ -21,25 +22,15 @@ export const FAQS = [
   { cat: "orders", q: L("Do you deliver outside Saudi Arabia?", "هل توصلون خارج المملكة؟"), a: L("We ship to all GCC countries and selected international destinations. Shipping options and costs are shown at checkout once you enter your address.", "نشحن إلى دول الخليج ووجهات دولية مختارة. تظهر خيارات وتكاليف الشحن عند إدخال العنوان في صفحة الدفع.") },
   { cat: "products", q: L("Are your products genuine?", "هل منتجاتكم أصلية؟"), a: L("Always. Every device is sourced from official distributors and comes sealed with the manufacturer's local warranty.", "دائماً. يتم توريد كل جهاز من الموزعين الرسميين ويأتي مغلقاً مع كفالة الشركة المصنعة المحلية.") },
   { cat: "products", q: L("How does the warranty work?", "كيف تعمل الكفالة؟"), a: L("Warranty is provided by the brand's authorised service centres in Saudi Arabia. Keep your order confirmation — it's your proof of purchase. We're happy to help you arrange service.", "تُقدَّم الكفالة من مراكز الصيانة المعتمدة للعلامة في المملكة. احتفظ بتأكيد الطلب فهو إثبات الشراء، ويسعدنا مساعدتك في ترتيب الصيانة.") },
-  { cat: "payments", q: L("Which payment methods do you accept?", "ما طرق الدفع المتاحة؟"), a: L("Cash on delivery, bank transfer / CliQ, and — when enabled — card payments through a secure hosted checkout. We never see or store your card details.", "الدفع عند الاستلام، والتحويل البنكي / كليك، والدفع بالبطاقة عند تفعيله عبر صفحة دفع آمنة. لا نطّلع على بيانات بطاقتك ولا نخزّنها.") },
+  { cat: "payments", q: L("Which payment methods do you accept?", "ما طرق الدفع المتاحة؟"), a: L("Cash on delivery, bank transfer, and — when enabled — card payments through a secure hosted checkout. We never see or store your card details.", "الدفع عند الاستلام، والتحويل البنكي، والدفع بالبطاقة عند تفعيله عبر صفحة دفع آمنة. لا نطّلع على بيانات بطاقتك ولا نخزّنها.") },
   { cat: "payments", q: L("Can I pay in instalments?", "هل يمكنني الدفع بالتقسيط؟"), a: L("Instalment plans depend on your bank's card programme. Contact us before ordering and we'll tell you what's available.", "تعتمد خطط التقسيط على برنامج بطاقة البنك الخاص بك. تواصل معنا قبل الطلب لنخبرك بالخيارات المتاحة.") },
 ];
 
 const legal = (titleEn: string, titleAr: string, en: string, ar: string) => ({ title: L(titleEn, titleAr), body: L(en, ar) });
 
-export const LEGAL_PAGES: Record<string, ReturnType<typeof legal>> = {
-  privacy: legal(
-    "Privacy Policy",
-    "سياسة الخصوصية",
-    `<h2>What we collect</h2><p>We collect only what we need to run the store: your name, contact details and delivery address when you order; account details if you register; and basic, privacy-friendly usage statistics. Card payments are processed by our payment provider — we never receive or store your full card number.</p><h2>How we use it</h2><ul><li>To process and deliver your orders and provide support.</li><li>To send transactional emails (order confirmations, shipping updates).</li><li>To send marketing emails <strong>only if you opted in</strong>; you can unsubscribe at any time.</li><li>To keep the store secure and prevent fraud.</li></ul><h2>Cookies & analytics</h2><p>Essential cookies keep you signed in and remember your cart. Analytics and advertising tags load only after you consent via the cookie banner.</p><h2>Your rights</h2><p>You can request a copy of your data or ask us to delete your account from <em>My account → Privacy</em>, or by contacting us.</p><h2>Contact</h2><p>Questions? Reach us through the contact page.</p>`,
-    `<h2>ما الذي نجمعه</h2><p>نجمع فقط ما نحتاجه لتشغيل المتجر: اسمك وبيانات التواصل وعنوان التوصيل عند الطلب، وبيانات الحساب عند التسجيل، وإحصاءات استخدام أساسية تحترم الخصوصية. تتم معالجة الدفع بالبطاقة لدى مزوّد الدفع — ولا نستلم رقم بطاقتك الكامل أو نخزّنه.</p><h2>كيف نستخدمها</h2><ul><li>لمعالجة طلباتك وتوصيلها وتقديم الدعم.</li><li>لإرسال الرسائل المتعلقة بالطلبات (تأكيد الطلب وتحديثات الشحن).</li><li>لإرسال الرسائل التسويقية <strong>فقط إذا وافقت</strong>، ويمكنك إلغاء الاشتراك في أي وقت.</li><li>للحفاظ على أمان المتجر ومنع الاحتيال.</li></ul><h2>ملفات تعريف الارتباط والتحليلات</h2><p>ملفات تعريف الارتباط الأساسية تُبقيك مسجلاً وتتذكر سلتك. أدوات التحليل والإعلانات لا تعمل إلا بعد موافقتك عبر شريط الموافقة.</p><h2>حقوقك</h2><p>يمكنك طلب نسخة من بياناتك أو حذف حسابك من <em>حسابي ← الخصوصية</em> أو بالتواصل معنا.</p>`,
-  ),
-  terms: legal(
-    "Terms & Conditions",
-    "الشروط والأحكام",
-    `<h2>Orders</h2><p>Placing an order is an offer to buy. We confirm acceptance when your order is processed. If an item becomes unavailable or a pricing error occurs, we'll contact you and you won't be charged for items we can't supply.</p><h2>Prices</h2><p>Prices are shown in Saudi Riyal and include 15% VAT unless stated otherwise. Converted prices in other currencies are estimates; you are charged in the currency shown at payment.</p><h2>Delivery & risk</h2><p>Delivery times are estimates. Risk passes to you on delivery.</p><h2>Returns</h2><p>See our Refund Policy.</p><h2>Liability</h2><p>Nothing in these terms limits rights you have under the consumer protection laws of the Kingdom of Saudi Arabia.</p>`,
-    `<h2>الطلبات</h2><p>يُعدّ تقديم الطلب عرضاً للشراء، ونؤكد القبول عند معالجة الطلب. إذا أصبح منتج غير متوفر أو حدث خطأ في السعر، سنتواصل معك ولن تُحاسب على ما لا يمكننا توفيره.</p><h2>الأسعار</h2><p>الأسعار بالريال السعودي وتشمل ضريبة القيمة المضافة 15% ما لم يُذكر خلاف ذلك. الأسعار المحوّلة بعملات أخرى تقديرية، ويتم الخصم بالعملة الظاهرة عند الدفع.</p><h2>التوصيل</h2><p>مواعيد التوصيل تقديرية، وتنتقل المسؤولية إليك عند الاستلام.</p><h2>الإرجاع</h2><p>راجع سياسة الاسترجاع.</p>`,
-  ),
+export const LEGAL_PAGES: Record<string, { title: { en: string; ar: string }; body: { en: string; ar: string }; excerpt?: { en: string; ar: string } }> = {
+  "privacy-policy": PRIVACY_PAGE,
+  "terms-and-conditions": TERMS_PAGE,
   "refund-policy": legal(
     "Refund & Returns Policy",
     "سياسة الإرجاع والاسترداد",
@@ -52,7 +43,7 @@ export const LEGAL_PAGES: Record<string, ReturnType<typeof legal>> = {
     `<h2>Saudi Arabia</h2><ul><li><strong>Standard delivery:</strong> 25 SAR, free on orders over 299 SAR. 2–5 working days.</li><li><strong>Express (Riyadh, Jeddah, Dammam):</strong> 45 SAR, next working day for orders before 4 pm.</li><li><strong>Store pickup:</strong> free.</li></ul><h2>GCC & international</h2><p>Rates and delivery estimates are calculated at checkout. Duties and import taxes may apply and are the recipient's responsibility.</p><h2>Tracking</h2><p>You'll receive tracking details by email when your order ships.</p>`,
     `<h2>داخل المملكة</h2><ul><li><strong>التوصيل العادي:</strong> 25 ريالاً، ومجاني للطلبات فوق 299 ريالاً. من 2 إلى 5 أيام عمل.</li><li><strong>التوصيل السريع (الرياض، جدة، الدمام):</strong> 45 ريالاً، في يوم العمل التالي للطلبات قبل الساعة 4 مساءً.</li><li><strong>الاستلام من المتجر:</strong> مجاناً.</li></ul><h2>الخليج والشحن الدولي</h2><p>تُحسب الأسعار ومدة التوصيل عند الدفع، وقد تُطبق رسوم جمركية على المستلم.</p>`,
   ),
-  cookies: legal(
+  "cookie-policy": legal(
     "Cookie Policy",
     "سياسة ملفات تعريف الارتباط",
     `<h2>Essential cookies</h2><p>Required for the store to work: your session, cart and security protections. These can't be switched off.</p><h2>Analytics & marketing</h2><p>Google Analytics and advertising pixels (if enabled by the store) load <strong>only after you accept</strong> in the cookie banner. You can change your choice any time from the footer link “Cookie preferences”.</p>`,

@@ -6,6 +6,7 @@ import { CategoryRail } from "@/components/store/listing/category-rail";
 import { listProducts, parseListingParams, hasRefinements } from "@/server/catalog/listing";
 import { baseCurrency } from "@/server/commerce/currency";
 import { ListingView } from "@/components/store/listing/listing-view";
+import { ExploreCategories } from "@/components/store/listing/explore-categories";
 import { Breadcrumbs } from "@/components/store/breadcrumbs";
 import { pageMetadata } from "@/server/seo";
 import type { Locale } from "@/i18n/config";
@@ -43,13 +44,13 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   return (
     <div className="container-store pb-10 pt-6">
-      <Breadcrumbs items={category.breadcrumbs} />
+      <Breadcrumbs items={category.breadcrumbs} inShop />
       <header className="mb-8 mt-6">
         <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{category.name}</h1>
         {category.description && <p className="mt-2 max-w-2xl text-muted">{category.description}</p>}
         <CategoryRail {...rail} />
       </header>
-      <ListingView result={result} basePath={`/category/${category.fullSlug}`} params={sp} locale={locale} />
+      <ListingView result={result} basePath={`/category/${category.fullSlug}`} params={sp} locale={locale} explore={<ExploreCategories locale={locale} currentId={category.id} />} />
     </div>
   );
 }

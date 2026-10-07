@@ -20,6 +20,7 @@ import { getSettings, saveSettings, invalidateSettings } from "../src/server/set
 import { invalidateCurrencies } from "../src/server/commerce/currency";
 import { refreshRates } from "../src/server/commerce/fx";
 import { SAUDI_TEXT_PAIRS } from "./saudi-text-pairs";
+import { swapContent } from "./lib/content-swap";
 
 const withOrders = process.argv.includes("--orders");
 const log = (...a: unknown[]) => console.log("  ·", ...a);
@@ -152,32 +153,7 @@ async function shipping() {
 
 /** Replace Jordan-specific copy in every content table (JSON-safe). */
 async function content() {
-  const swapJson = (v: unknown) => {
-    let s = JSON.stringify(v);
-    const before = s;
-    for (const [a, b] of SAUDI_TEXT_PAIRS) s = s.split(JSON.stringify(a).slice(1, -1)).join(JSON.stringify(b).slice(1, -1));
-    return s === before ? null : JSON.parse(s);
-  };
-  let n = 0;
-  const run = async <T extends { id: string }>(rows: T[], fields: (keyof T)[], update: (id: string, data: Record<string, unknown>) => Promise<unknown>) => {
-    for (const r of rows) {
-      const data: Record<string, unknown> = {};
-      for (const f of fields) {
-        const next = swapJson(r[f]);
-        if (next !== null) data[f as string] = next;
-      }
-      if (Object.keys(data).length) {
-        await update(r.id, data);
-        n++;
-      }
-    }
-  };
-  await run(await db.announcement.findMany(), ["text"], (id, data) => db.announcement.update({ where: { id }, data }));
-  await run(await db.slide.findMany(), ["eyebrow", "heading", "body"], (id, data) => db.slide.update({ where: { id }, data }));
-  await run(await db.pageSection.findMany(), ["data"], (id, data) => db.pageSection.update({ where: { id }, data }));
-  await run(await db.faq.findMany(), ["question", "answer"], (id, data) => db.faq.update({ where: { id }, data }));
-  await run(await db.coupon.findMany(), ["name"], (id, data) => db.coupon.update({ where: { id }, data }));
-  await run(await db.review.findMany(), ["body"], (id, data) => db.review.update({ where: { id }, data }));
+  const n = await swapContent(SAUDI_TEXT_PAIRS);
   // Automatic promotion copy that mentions JOD amounts.
   await db.coupon.updateMany({ where: { isAutomatic: true, name: { path: ["en"], equals: "Spend 500, save 20 JOD" } }, data: { name: { en: "Spend 2,500 SAR, save 100 SAR", ar: "أنفق 2,500 ريال ووفّر 100 ريال" }, value: 10000, minSubtotal: 250000 } });
   log(`Content updated in ${n} records`);

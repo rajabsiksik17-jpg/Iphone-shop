@@ -14,6 +14,7 @@ import { t as tr } from "@/lib/i18n-text";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { profileData } from "@/server/admin/system";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type Notification = { id: string; event: string; title: Record<string, string>; body: Record<string, string>; link: string | null; severity: string; createdAt: string; read: boolean };
 
@@ -70,7 +71,7 @@ export function NotificationsView({ initial }: { initial: Notification[] }) {
                   <span className="min-w-0 flex-1">
                     <span className={cn("block text-sm", !n.read && "font-semibold")}>{tr(n.title, locale)}</span>
                     {tr(n.body, locale) && <span className="block text-[13px] text-ad-muted">{tr(n.body, locale)}</span>}
-                    <span className="mt-0.5 block text-xs text-ad-muted">{timeAgo(n.createdAt, locale)}</span>
+                    <span className="mt-0.5 block text-xs text-ad-muted"><TimeAgo date={n.createdAt} /></span>
                   </span>
                   {!n.read && <span className="mt-2 size-2 shrink-0 rounded-full bg-ad-accent" aria-label={t("notif.unread")} />}
                 </>
@@ -214,7 +215,7 @@ export function ProfileView({ p }: { p: Profile }) {
                     </p>
                     <p className="truncate text-xs text-ad-muted">{s.device ?? "—"}</p>
                   </div>
-                  <span className="shrink-0 text-xs text-ad-muted">{timeAgo(s.lastSeenAt, locale)}</span>
+                  <span className="shrink-0 text-xs text-ad-muted"><TimeAgo date={s.lastSeenAt} /></span>
                   {!s.current && (
                     <Button
                       size="icon-sm"

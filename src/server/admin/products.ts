@@ -15,8 +15,55 @@ export const PRODUCT_PAGE_SIZE = 30;
 
 export type ProductListQuery = { q?: string; status?: string; brand?: string; category?: string; stock?: string; sort?: string; page?: number };
 
-export async function listAdminProducts(q: ProductListQuery, locale: string) {
-  const page = Math.max(1, q.page ?? 1);
+const quickSchema = z
+  .object({
+    name: z.object({ en: z.string().trim().max(200), ar: z.string().trim().max(200) }).partial(),
+    price: z.number().int().min(0).max(1_000_000_000),
+    salePrice: z.number().int().min(0).max(1_000_000_000).nullable(),
+    stock: z.number().int().min(0).max(1_000_000),
+    status: z.enum(["ACTIVE", "DRAFT", "ARCHIVED"]),
+  })
+  .partial();
+
+/**
+ * Inline edits from the products table. Price and stock are per product only
+ * for simple products — variable products keep them per variation (edited in
+ * the drawer). Stock changes go through the inventory ledger.
+ */
+export async function quickUpdateProduct(id: string, raw: unknown, staff: CurrentStaff) {
+  const patch = quickSchema.parse(raw);
+  const p = await db.product.findUnique({ where: { id } });
+  if (!p) throw new AppError("not_found", 404);
+  if ((patch.price != null || patch.salePrice !== undefined || patch.stock != null) && p.type !== "SIMPLE") throw new AppError("variable_use_editor", 409);
+  const price = patch.price ?? p.price;
+  const sale = patch.salePrice === undefined ? p.salePrice : patch.salePrice;
+  if (sale != null && sale >= price) throw Errors.invalid({ salePrice: ["sale_not_lower"] });
+  const data: Prisma.ProductUpdateInput = {};
+  if (patch.name) {
+    const current = (p.name ?? {}) as Record<string, string>;
+    const next = { ...current, ...Object.fromEntries(Object.entries(patch.name).filter(([, v]) => v)) };
+    if (!next.en && !next.ar) throw Errors.invalid({ name: ["required"] });
+    data.name = next;
+  }
+  if (patch.price != null) data.price = patch.price;
+  if (patch.salePrice !== undefined) data.salePrice = patch.salePrice;
+  if (patch.status) {
+    data.status = patch.status;
+    if (patch.status === "ACTIVE" && !p.publishedAt) data.publishedAt = new Date();
+  }
+  if (Object.keys(data).length) await db.product.update({ where: { id }, data });
+  if (patch.stock != null && p.trackInventory && patch.stock !== p.stock) {
+    const r = await db.$transaction((tx) => applyStockChange({ productId: id, delta: patch.stock! - p.stock, reason: "ADJUSTMENT", note: "Quick edit", userId: staff.id }, tx));
+    if (r) await afterStockChange(id, null, r.balance, p.stock);
+  }
+  await refreshProductDerived(id);
+  await audit({ actor: staff, action: "product.quick_edit", entityType: "product", entityId: id, summary: Object.keys(patch).join(", "), changes: patch });
+  const fresh = await db.product.findUnique({ where: { id }, select: { price: true, salePrice: true, effectivePrice: true, maxPrice: true, onSale: true, stock: true, stockStatus: true, status: true, name: true } });
+  return fresh!;
+}
+
+/** Admin product filters (search, status, brand, category subtree, stock) — shared by the list and bulk "all matching". */
+export async function productWhere(q: ProductListQuery): Promise<Prisma.ProductWhereInput> {
   const and: Prisma.ProductWhereInput[] = [];
   if (q.q) and.push({ OR: [{ searchText: { contains: q.q.toLowerCase() } }, { sku: { contains: q.q, mode: "insensitive" } }, { variants: { some: { sku: { contains: q.q, mode: "insensitive" } } } }] });
   if (q.status) and.push({ status: q.status as "ACTIVE" });
@@ -28,7 +75,12 @@ export async function listAdminProducts(q: ProductListQuery, locale: string) {
   if (q.stock === "low") and.push({ stockStatus: "LOW_STOCK" });
   if (q.stock === "out") and.push({ stockStatus: "OUT_OF_STOCK" });
   if (q.stock === "sale") and.push({ onSale: true });
-  const where = and.length ? { AND: and } : {};
+  return and.length ? { AND: and } : {};
+}
+
+export async function listAdminProducts(q: ProductListQuery, locale: string) {
+  const page = Math.max(1, q.page ?? 1);
+  const where = await productWhere(q);
   const orderBy: Prisma.ProductOrderByWithRelationInput =
     q.sort === "name" ? { slug: "asc" } : q.sort === "price" ? { effectivePrice: "asc" } : q.sort === "-price" ? { effectivePrice: "desc" } : q.sort === "stock" ? { stock: "asc" } : q.sort === "sales" ? { salesCount: "desc" } : { updatedAt: "desc" };
   const [rows, total, brands, categories, statusCounts] = await Promise.all([
@@ -37,7 +89,12 @@ export async function listAdminProducts(q: ProductListQuery, locale: string) {
       orderBy,
       skip: (page - 1) * PRODUCT_PAGE_SIZE,
       take: PRODUCT_PAGE_SIZE,
-      include: { brand: { select: { name: true } }, images: { take: 1, orderBy: { position: "asc" }, include: { media: { select: { url: true } } } }, _count: { select: { variants: true } } },
+      include: {
+        brand: { select: { name: true } },
+        images: { take: 1, orderBy: { position: "asc" }, include: { media: { select: { url: true } } } },
+        categories: { orderBy: { isPrimary: "desc" }, take: 1, select: { category: { select: { name: true } } } },
+        _count: { select: { variants: true } },
+      },
     }),
     db.product.count({ where }),
     db.brand.findMany({ orderBy: { position: "asc" }, select: { id: true, name: true } }),
@@ -52,6 +109,11 @@ export async function listAdminProducts(q: ProductListQuery, locale: string) {
       sku: p.sku,
       brand: p.brand ? t(p.brand.name, locale) : null,
       image: p.images[0]?.media.url ?? null,
+      category: p.categories[0] ? t(p.categories[0].category.name, locale) : null,
+      basePrice: p.price,
+      salePrice: p.salePrice,
+      rating: p.ratingAvg,
+      reviews: p.ratingCount,
       price: p.effectivePrice,
       maxPrice: p.maxPrice,
       onSale: p.onSale,

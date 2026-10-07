@@ -166,7 +166,7 @@ export function PageBuilder({ data }: { data: PageEditorData }) {
         description={
           <span dir="ltr" className="inline-block">
             {publicPath}
-            {savedAt && !isNew && <span className="text-ad-muted"> · {t("cms.lastSaved", { t: timeAgo(savedAt, locale) })}</span>}
+            {savedAt && !isNew && <span className="text-ad-muted" suppressHydrationWarning> · {t("cms.lastSaved", { t: timeAgo(savedAt, locale) })}</span>}
           </span>
         }
         actions={

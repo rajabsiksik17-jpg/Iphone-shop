@@ -15,6 +15,7 @@ import { saveCurrenciesAction, saveFxSettingsAction, refreshRatesAction, saveShi
 import { t as tr, type LocalizedText } from "@/lib/i18n-text";
 import { cn } from "@/lib/utils";
 import type { currencyPage, shippingZones, orderStatusList, templateList } from "@/server/admin/settings-data";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 let seq = 0;
 const tmp = () => `tmp-${Date.now().toString(36)}${(seq++).toString(36)}`;

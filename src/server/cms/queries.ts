@@ -25,6 +25,12 @@ export const getPage = cache(async (slug: string, opts: { preview?: boolean } = 
   };
 });
 
+/** Published information pages (legal template), for "related policies" links. */
+export const legalPageLinks = cache(async (locale: string) => {
+  const rows = await db.page.findMany({ where: { template: "legal", status: "PUBLISHED" }, select: { slug: true, title: true }, orderBy: { slug: "asc" } });
+  return rows.map((p) => ({ slug: p.slug, title: t(p.title, locale) })).filter((p) => p.title);
+});
+
 export type ResolvedMenuItem = {
   id: string;
   label: string;
@@ -34,6 +40,8 @@ export type ResolvedMenuItem = {
   icon: string | null;
   image: string | null;
   badge: string | null;
+  /** Products in this category and its subcategories (category entries only). */
+  count?: number;
   /** How the desktop dropdown renders: plain list, category mega panel, brand grid. */
   kind: "link" | "all-categories" | "categories" | "brands";
   children: ResolvedMenuItem[];
@@ -69,6 +77,7 @@ export const getMenu = cache(async (key: string, locale: string): Promise<Resolv
     icon: n.icon,
     image: n.image?.url ?? null,
     badge: null,
+    count: n.productCount,
     kind: "link",
     children: depth < 3 ? n.children.map((c) => fromNode(c, depth + 1)) : [],
   });
@@ -131,7 +140,7 @@ export const getMenu = cache(async (key: string, locale: string): Promise<Resolv
           }
         } else if (i.type === "CATEGORY" && children.length) kind = "categories";
         const badge = t(i.badge, locale) || null;
-        return [{ id: i.id, label: t(i.label, locale) || r.fallback, href: r.href, newTab: i.openInNewTab, highlight: i.highlight, icon: i.icon ?? r.icon ?? null, image: i.image ?? r.image ?? null, badge, kind, children }];
+        return [{ id: i.id, label: t(i.label, locale) || r.fallback, href: r.href, newTab: i.openInNewTab, highlight: i.highlight, icon: i.icon ?? r.icon ?? null, image: i.image ?? r.image ?? null, badge, count: i.type === "CATEGORY" && i.refId ? findNode(tree, i.refId)?.productCount : undefined, kind, children }];
       });
   return build(null);
 });
@@ -144,15 +153,21 @@ export const getSlider = cache(async (key: string, locale: string) => {
       slides: {
         where: { isVisible: true, AND: [{ OR: [{ startsAt: null }, { startsAt: { lte: now } }] }, { OR: [{ endsAt: null }, { endsAt: { gt: now } }] }] },
         orderBy: { position: "asc" },
-        include: { desktopImage: true, mobileImage: true },
+        include: { desktopImage: true, tabletImage: true, mobileImage: true },
       },
     },
   });
   if (!slider) return null;
+  // Language-specific artwork (media ids per device) takes precedence over the defaults.
+  const overridesOf = (raw: unknown) => (((raw ?? {}) as Record<string, Record<string, string | null | undefined>>)[locale] ?? {}) as { desktop?: string | null; tablet?: string | null; mobile?: string | null };
+  const overrideIds = slider.slides.flatMap((s) => Object.values(overridesOf(s.localeImages)).filter(Boolean) as string[]);
+  const overrideMedia = new Map((overrideIds.length ? await db.media.findMany({ where: { id: { in: overrideIds } } }) : []).map((m) => [m.id, m]));
   const settings = slider.settings as { autoplay?: boolean; interval?: number; transition?: "slide" | "fade"; loop?: boolean; showArrows?: boolean; showDots?: boolean };
   return {
     settings: { autoplay: settings.autoplay ?? true, interval: settings.interval ?? 6000, transition: settings.transition ?? "fade", loop: settings.loop ?? true, showArrows: settings.showArrows ?? true, showDots: settings.showDots ?? true },
     slides: slider.slides.map((s) => {
+      const own = overridesOf(s.localeImages);
+      const pick = (sl: typeof s, device: "desktop" | "tablet" | "mobile") => (own[device] && overrideMedia.get(own[device]!)) || (device === "desktop" ? sl.desktopImage : device === "tablet" ? sl.tabletImage : sl.mobileImage);
       const style = s.style as Record<string, string | number | boolean>;
       const cta = (v: unknown) => {
         const c = (v ?? {}) as { label?: unknown; href?: string };
@@ -166,8 +181,9 @@ export const getSlider = cache(async (key: string, locale: string) => {
         body: t(s.body, locale),
         primary: cta(s.primaryCta),
         secondary: cta(s.secondaryCta),
-        desktop: imageDTO(s.desktopImage, locale, t(s.heading, locale)),
-        mobile: imageDTO(s.mobileImage, locale, t(s.heading, locale)),
+        desktop: imageDTO(pick(s, "desktop"), locale, t(s.heading, locale)),
+        tablet: imageDTO(pick(s, "tablet"), locale, t(s.heading, locale)),
+        mobile: imageDTO(pick(s, "mobile"), locale, t(s.heading, locale)),
         style: {
           align: (style.align as "start" | "center" | "end") ?? "start",
           vertical: (style.vertical as "top" | "center" | "bottom") ?? "center",
@@ -177,6 +193,10 @@ export const getSlider = cache(async (key: string, locale: string) => {
           background: (style.background as string) ?? "#0f172a",
           animation: (style.animation as "fade-up" | "fade" | "zoom" | "none") ?? "fade-up",
           buttonStyle: (style.buttonStyle as "solid" | "outline" | "glass") ?? "solid",
+          headingSize: (style.headingSize as "sm" | "md" | "lg") ?? "md",
+          mobileAlign: (style.mobileAlign as "inherit" | "start" | "center" | "end") ?? "inherit",
+          mobileVertical: (style.mobileVertical as "inherit" | "top" | "center" | "bottom") ?? "inherit",
+          showBodyOnMobile: style.showBodyOnMobile === true,
         },
       };
     }),

@@ -172,13 +172,21 @@ export async function duplicatePage(id: string, staff: CurrentStaff) {
 const ctaSchema = z.object({ label: lt(80), href: safeUrl.default("") }).prefault({});
 const hex = z.string().regex(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
 
+const mediaId = z.string().max(64).nullable().optional();
+const deviceImages = z.object({ desktop: mediaId, tablet: mediaId, mobile: mediaId }).partial();
+/** Language-specific artwork; any device left empty falls back to the default image. */
+const localeImagesSchema = z.object({ ar: deviceImages, en: deviceImages }).partial().prefault({});
+export type LocaleImageIds = z.infer<typeof localeImagesSchema>;
+
 export const slideSchema = z.object({
   id: z.string().max(64).optional(),
   isVisible: z.boolean(),
   startsAt: dateOrNull,
   endsAt: dateOrNull,
   desktopImageId: z.string().max(64).nullable(),
+  tabletImageId: z.string().max(64).nullable().default(null),
   mobileImageId: z.string().max(64).nullable(),
+  localeImages: localeImagesSchema,
   eyebrow: lt(120),
   heading: lt(200),
   body: lt(600),
@@ -194,6 +202,11 @@ export const slideSchema = z.object({
       background: hex.default("#0f172a"),
       animation: z.enum(["fade-up", "fade", "zoom", "none"]).default("fade-up"),
       buttonStyle: z.enum(["solid", "outline", "glass"]).default("solid"),
+      // Responsive text: heading scale, and phone-specific alignment/position ("inherit" = same as desktop).
+      headingSize: z.enum(["sm", "md", "lg"]).default("md"),
+      mobileAlign: z.enum(["inherit", "start", "center", "end"]).default("inherit"),
+      mobileVertical: z.enum(["inherit", "top", "center", "bottom"]).default("inherit"),
+      showBodyOnMobile: z.boolean().default(false),
     })
     .prefault({}),
 });
@@ -212,8 +225,16 @@ export const sliderSettingsSchema = z
 export async function sliderList() {
   const sliders = await db.slider.findMany({
     orderBy: { createdAt: "asc" },
-    include: { slides: { orderBy: { position: "asc" }, include: { desktopImage: { select: { id: true, url: true } }, mobileImage: { select: { id: true, url: true } } } } },
+    include: { slides: { orderBy: { position: "asc" }, include: { desktopImage: { select: { id: true, url: true } }, tabletImage: { select: { id: true, url: true } }, mobileImage: { select: { id: true, url: true } } } } },
   });
+  // Language overrides store media ids; resolve them to previews for the editor.
+  const overrideIds = sliders.flatMap((s) => s.slides.flatMap((sl) => Object.values((sl.localeImages ?? {}) as Record<string, Record<string, string | null>>).flatMap((d) => Object.values(d ?? {}).filter(Boolean) as string[])));
+  const media = new Map((overrideIds.length ? await db.media.findMany({ where: { id: { in: overrideIds } }, select: { id: true, url: true } }) : []).map((m) => [m.id, m]));
+  const resolveOverrides = (raw: unknown) => {
+    const ids = localeImagesSchema.parse(raw ?? {});
+    const dev = (d?: z.infer<typeof deviceImages>) => ({ desktop: (d?.desktop && media.get(d.desktop)) || null, tablet: (d?.tablet && media.get(d.tablet)) || null, mobile: (d?.mobile && media.get(d.mobile)) || null });
+    return { ar: dev(ids.ar), en: dev(ids.en) };
+  };
   const usedBy = await db.pageSection.findMany({ where: { type: "hero_slider" }, select: { data: true, page: { select: { slug: true, title: true } } } });
   return sliders.map((s) => ({
     id: s.id,
@@ -227,7 +248,9 @@ export async function sliderList() {
       startsAt: sl.startsAt?.toISOString() ?? null,
       endsAt: sl.endsAt?.toISOString() ?? null,
       desktopImage: sl.desktopImage,
+      tabletImage: sl.tabletImage,
       mobileImage: sl.mobileImage,
+      localeImages: resolveOverrides(sl.localeImages),
       eyebrow: sl.eyebrow as Record<string, string>,
       heading: sl.heading as Record<string, string>,
       body: sl.body as Record<string, string>,
@@ -259,7 +282,9 @@ export async function saveSlider(id: string | null, raw: unknown, staff: Current
         startsAt: s.startsAt ? new Date(s.startsAt) : null,
         endsAt: s.endsAt ? new Date(s.endsAt) : null,
         desktopImageId: s.desktopImageId,
+        tabletImageId: s.tabletImageId,
         mobileImageId: s.mobileImageId,
+        localeImages: s.localeImages,
         eyebrow: s.eyebrow,
         heading: s.heading,
         body: s.body,

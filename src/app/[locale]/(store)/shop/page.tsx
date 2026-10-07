@@ -4,6 +4,8 @@ import { redirect } from "@/i18n/navigation";
 import { listProducts, parseListingParams, hasRefinements } from "@/server/catalog/listing";
 import { baseCurrency } from "@/server/commerce/currency";
 import { ListingView } from "@/components/store/listing/listing-view";
+import { CategoryRail } from "@/components/store/listing/category-rail";
+import { categoryTree } from "@/server/catalog/taxonomy";
 import { Breadcrumbs } from "@/components/store/breadcrumbs";
 import { pageMetadata } from "@/server/seo";
 import type { Locale } from "@/i18n/config";
@@ -35,13 +37,16 @@ export default async function ShopPage({ params, searchParams }: Props) {
   // Searches have their own page; old /shop?q= links keep working.
   if (typeof sp.q === "string" && sp.q.trim()) redirect({ href: `/search?${new URLSearchParams(sp as Record<string, string>).toString()}`, locale });
   const query = parseListingParams(sp, (await baseCurrency()).decimals);
-  const result = await listProducts(query, locale);
+  const [result, tree] = await Promise.all([listProducts(query, locale), categoryTree(locale)]);
+  // Top-level categories as stories (empty ones are skipped; counts include subcategories).
+  const stories = tree.filter((c) => c.productCount > 0).map((c) => ({ id: c.id, fullSlug: c.fullSlug, name: c.name, icon: c.icon, image: c.image, count: c.productCount, current: false }));
   return (
     <div className="container-store pb-10 pt-6">
       <Breadcrumbs items={[{ label: t("common.shop"), href: "/shop" }]} />
       <header className="mb-8 mt-6">
         <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">{query.q ? t("search.resultsFor", { q: query.q }) : t("listing.shopTitle")}</h1>
         {!query.q && <p className="mt-2 max-w-2xl text-muted">{t("listing.shopDescription")}</p>}
+        <CategoryRail items={stories} parent={null} />
       </header>
       <ListingView result={result} basePath="/shop" params={sp} locale={locale} query={query.q} />
     </div>

@@ -401,6 +401,17 @@ export const fxSchema = z.object({
   lastError: z.string().nullable().default(null),
 });
 
+const iconValue = z.string().trim().max(120).nullable().default(null);
+/** Store type: drives presets (attributes, categories, card specs) and trust-badge icons. */
+export const storeTypeSchema = z.object({
+  type: z.string().max(40).default("electronics"),
+  /** Name shown for a custom store type. */
+  customName: z.object({ en: z.string().max(80).default(""), ar: z.string().max(80).default("") }).prefault({}),
+  /** Icons for the trust badges (product page, cart). Empty = the store type's default. */
+  icons: z.object({ delivery: iconValue, warranty: iconValue, returns: iconValue, payment: iconValue }).prefault({}),
+  appliedPresets: z.array(z.string().max(40)).max(40).default([]),
+});
+
 export const settingsSchemas = {
   store: storeSchema,
   appearance: appearanceSchema,
@@ -420,6 +431,7 @@ export const settingsSchemas = {
   privacy: privacySchema,
   geo: geoSchema,
   fx: fxSchema,
+  storeType: storeTypeSchema,
 } as const;
 
 export type SettingsGroup = keyof typeof settingsSchemas;
@@ -450,4 +462,5 @@ export const SETTINGS_PERMISSIONS: Record<SettingsGroup, import("@/config/permis
   privacy: "settings.general",
   geo: "settings.general",
   fx: "settings.general",
+  storeType: "settings.general",
 };

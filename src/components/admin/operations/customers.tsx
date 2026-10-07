@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
-import { Mail, Phone, MapPin, Ban, RotateCcw, Coins, Heart, ShoppingCart, MessagesSquare, Star, Users } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
+import { Mail, Phone, MapPin, Ban, RotateCcw, Coins, Heart, ShoppingCart, MessagesSquare, Star, Users, Eye, ExternalLink } from "lucide-react";
+import { AdminDrawer, DrawerBody, DrawerHeader, DrawerSkeleton, useDrawerParam } from "../drawer";
 import { toast } from "sonner";
 import { Link, useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -9,15 +11,42 @@ import { Modal } from "@/components/ui/overlay";
 import { useAdmin } from "../admin-context";
 import { PageHeader, Panel, DataTable, FilterTabs, SearchBox, Pager, Pill, ColorPill, StatCard, AdminEmpty } from "../ui";
 import { Label, TextInput } from "../fields";
-import { setCustomerStatusAction, adjustPointsAction } from "@/actions/admin/operations";
+import { setCustomerStatusAction, adjustPointsAction, customerDrawerAction } from "@/actions/admin/operations";
 import { markSeenAction } from "@/actions/admin/shell";
 import { timeAgo, fmtDate } from "@/lib/time";
+import { cn } from "@/lib/utils";
 import type { customerList, CustomerDetail } from "@/server/admin/operations";
+import { TimeAgo } from "@/components/ui/time-ago";
+import { useLiveRefresh } from "../use-live-refresh";
 
 type List = Awaited<ReturnType<typeof customerList>>;
 
 export function CustomersList({ data }: { data: List }) {
   const { t, fmt, locale, refreshCounters } = useAdmin();
+  const sp = useSearchParams();
+  // Customer drawer (?customer=<id>).
+  const drawer = useDrawerParam("customer");
+  const [detail, setDetail] = useState<CustomerDetail | null>(null);
+  const seq = useRef(0);
+  const load = useCallback(
+    async (id: string) => {
+      const n = ++seq.current;
+      const r = await customerDrawerAction(id, locale);
+      if (n !== seq.current) return;
+      if (r.ok) setDetail(r.data);
+      else {
+        toast.error(t("c.error"));
+        drawer.close();
+      }
+    },
+    [locale, t, drawer],
+  );
+  useEffect(() => {
+    if (drawer.value) void load(drawer.value);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawer.value]);
+  useLiveRefresh(["customers", "orders"], () => drawer.value && void load(drawer.value));
+  const context = [t("cu.title"), ...(sp.get("q") ? [`“${sp.get("q")}”`] : [])];
   useEffect(() => {
     // Viewing the list clears the "new customers" badge.
     markSeenAction("customers").then(refreshCounters);
@@ -41,7 +70,7 @@ export function CustomersList({ data }: { data: List }) {
         </div>
         <DataTable
           rows={data.rows}
-          href={(r) => `/admin/customers/${r.id}`}
+          onRowClick={(r) => drawer.open(r.id)}
           empty={<AdminEmpty icon={<Users />} />}
           columns={[
             {
@@ -61,8 +90,23 @@ export function CustomersList({ data }: { data: List }) {
             },
             { key: "o", header: t("cu.ordersCount"), align: "center", cell: (r) => r.orders },
             { key: "s", header: t("cu.spent"), align: "end", cell: (r) => <span className="tabular">{fmt(r.spent)}</span> },
-            { key: "l", header: t("cu.lastOrder"), cell: (r) => <span className="text-ad-muted">{r.lastOrder ? timeAgo(r.lastOrder, locale) : "—"}</span> },
-            { key: "c", header: t("cu.since"), cell: (r) => <span className="text-ad-muted">{fmtDate(r.createdAt, locale)}</span> },
+            { key: "l", header: t("cu.lastOrder"), cell: (r) => <span className="text-ad-muted">{r.lastOrder ? <TimeAgo date={r.lastOrder} /> : "—"}</span> },
+            { key: "c", header: t("cu.since"), className: "max-lg:hidden", cell: (r) => <span className="text-ad-muted">{fmtDate(r.createdAt, locale)}</span> },
+            {
+              key: "a",
+              header: <span className="sr-only">{t("c.actions")}</span>,
+              align: "end",
+              cell: (r) => (
+                <div className="flex items-center justify-end gap-1">
+                  <button type="button" onClick={() => drawer.open(r.id)} className="grid size-8 place-items-center rounded-lg text-ad-muted transition hover:bg-ad-hover hover:text-ad-fg" aria-label={`${t("c.view")} ${r.name}`}>
+                    <Eye className="size-4" />
+                  </button>
+                  <a href={`mailto:${r.email}`} className="grid size-8 place-items-center rounded-lg text-ad-muted transition hover:bg-ad-hover hover:text-ad-fg" aria-label={`${locale === "ar" ? "مراسلة" : "Email"} ${r.name}`}>
+                    <Mail className="size-4" />
+                  </a>
+                </div>
+              ),
+            },
           ]}
           mobile={(r) => (
             <div className="flex items-center gap-3">
@@ -80,19 +124,52 @@ export function CustomersList({ data }: { data: List }) {
         />
         <Pager page={data.page} pageCount={data.pageCount} total={data.total} />
       </Panel>
+      <AdminDrawer open={Boolean(drawer.value)} onOpenChange={(o) => !o && drawer.close()} size="lg" label={t("cu.title")}>
+        {detail && (detail.id === drawer.value || !drawer.value) ? <CustomerView key={detail.id} c={detail} layout="drawer" context={context} onChanged={() => drawer.value && load(drawer.value)} /> : <DrawerSkeleton />}
+      </AdminDrawer>
     </>
   );
 }
 
-export function CustomerView({ c }: { c: CustomerDetail }) {
+/** Customer profile: full page, or inside the customers drawer (`layout="drawer"`). */
+export function CustomerView({ c, layout = "page", context, onChanged }: { c: CustomerDetail; layout?: "page" | "drawer"; context?: string[]; onChanged?: () => void }) {
   const { t, fmt, locale, can } = useAdmin();
   const router = useRouter();
+  const drawer = layout === "drawer";
+  const changed = () => {
+    router.refresh();
+    onChanged?.();
+  };
   const [pending, start] = useTransition();
   const [pointsOpen, setPointsOpen] = useState(false);
   const [delta, setDelta] = useState(0);
   const [note, setNote] = useState("");
-  return (
+  const description = `${t("cu.since")} ${fmtDate(c.createdAt, locale)}${c.lastLoginAt ? ` · ${locale === "ar" ? "آخر دخول" : "Last seen"} ${timeAgo(c.lastLoginAt, locale)}` : ""}`;
+  const actions = can("customers.manage") && (
     <>
+      <Button size="sm" variant="outline" leftIcon={<Coins />} onClick={() => setPointsOpen(true)} className="max-sm:hidden">
+        {t("cu.adjustPoints")}
+      </Button>
+      <Button
+        size="sm"
+        variant={c.status === "SUSPENDED" ? "primary" : "outline"}
+        className={c.status === "SUSPENDED" ? "" : "text-red-600"}
+        loading={pending}
+        leftIcon={c.status === "SUSPENDED" ? <RotateCcw /> : <Ban />}
+        onClick={() => start(async () => { await setCustomerStatusAction(c.id, c.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"); changed(); })}
+      >
+        {c.status === "SUSPENDED" ? t("cu.reactivate") : t("cu.suspend")}
+      </Button>
+      {drawer && (
+        <Link href={`/admin/customers/${c.id}`} className="grid size-9 place-items-center rounded-lg border border-ad-border text-ad-muted hover:bg-ad-hover hover:text-ad-fg" aria-label={locale === "ar" ? "فتح الصفحة الكاملة" : "Open full page"}>
+          <ExternalLink className="size-4" />
+        </Link>
+      )}
+    </>
+  );
+  const content = (
+    <>
+      {drawer ? null : (
       <PageHeader
         back={{ href: "/admin/customers", label: t("cu.title") }}
         title={
@@ -100,41 +177,24 @@ export function CustomerView({ c }: { c: CustomerDetail }) {
             {c.name} {c.status === "SUSPENDED" && <Pill tone="red">{t("cu.suspended")}</Pill>}
           </span>
         }
-        description={`${t("cu.since")} ${fmtDate(c.createdAt, locale)}${c.lastLoginAt ? ` · ${locale === "ar" ? "آخر دخول" : "Last seen"} ${timeAgo(c.lastLoginAt, locale)}` : ""}`}
-        actions={
-          can("customers.manage") && (
-            <>
-              <Button size="sm" variant="outline" leftIcon={<Coins />} onClick={() => setPointsOpen(true)}>
-                {t("cu.adjustPoints")}
-              </Button>
-              <Button
-                size="sm"
-                variant={c.status === "SUSPENDED" ? "primary" : "outline"}
-                className={c.status === "SUSPENDED" ? "" : "text-red-600"}
-                loading={pending}
-                leftIcon={c.status === "SUSPENDED" ? <RotateCcw /> : <Ban />}
-                onClick={() => start(async () => { await setCustomerStatusAction(c.id, c.status === "SUSPENDED" ? "ACTIVE" : "SUSPENDED"); router.refresh(); })}
-              >
-                {c.status === "SUSPENDED" ? t("cu.reactivate") : t("cu.suspend")}
-              </Button>
-            </>
-          )
-        }
+        description={description}
+        actions={actions}
       />
+      )}
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard label={t("cu.ordersCount")} value={c.stats.orders} />
         <StatCard label={t("cu.spent")} value={fmt(c.stats.spent)} />
         <StatCard label={t("cu.aov")} value={fmt(c.stats.aov)} />
         <StatCard label={t("cu.points")} value={c.points.balance.toLocaleString()} />
       </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className={cn("grid gap-4", drawer ? "@4xl:grid-cols-[minmax(0,1fr)_320px]" : "xl:grid-cols-[minmax(0,1fr)_340px]")}>
         <div className="space-y-4">
           <Panel title={t("nav.orders")} padded={false}>
             {c.orders.length ? (
               <ul className="divide-y divide-ad-border">
                 {c.orders.map((o) => (
                   <li key={o.id}>
-                    <Link href={`/admin/orders/${o.id}`} className="flex items-center gap-3 px-5 py-3 text-sm hover:bg-ad-hover">
+                    <Link href={`/admin/orders?order=${o.id}`} className="flex items-center gap-3 px-5 py-3 text-sm hover:bg-ad-hover">
                       <span className="w-24 font-medium">{o.number}</span>
                       <span className="flex-1 text-ad-muted">{fmtDate(o.placedAt, locale)}</span>
                       <ColorPill label={o.status.label} color={o.status.color} />
@@ -251,6 +311,19 @@ export function CustomerView({ c }: { c: CustomerDetail }) {
           )}
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <>
+      {drawer ? (
+        <>
+          <DrawerHeader context={context} title={c.name} badges={c.status === "SUSPENDED" ? <Pill tone="red">{t("cu.suspended")}</Pill> : undefined} subtitle={description} actions={actions} />
+          <DrawerBody>{content}</DrawerBody>
+        </>
+      ) : (
+        content
+      )}
       <Modal open={pointsOpen} onOpenChange={setPointsOpen} title={t("cu.adjustPoints")} description={`${t("cu.points")}: ${c.points.balance}`}>
         <div className="space-y-3">
           <div>
@@ -271,7 +344,7 @@ export function CustomerView({ c }: { c: CustomerDetail }) {
                 if (r.ok) {
                   toast.success(t("c.saved"));
                   setPointsOpen(false);
-                  router.refresh();
+                  changed();
                 }
               })
             }

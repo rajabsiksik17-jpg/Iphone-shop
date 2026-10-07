@@ -1,7 +1,9 @@
 "use server";
 
 import { z } from "zod";
+import * as data from "@/server/admin/products";
 import { saveProduct, duplicateProduct, deleteProducts, bulkProducts, searchProductsForPicker } from "@/server/admin/products";
+import { AppError } from "@/server/errors";
 import { adjustStock } from "@/server/catalog/inventory";
 import { db } from "@/server/db";
 import { adminRun } from "./_base";
@@ -46,4 +48,43 @@ export async function stockHistoryAction(productId: string) {
     },
     { revalidate: false },
   );
+}
+
+/** Inline edit from the products table (name, price, sale price, stock, status). */
+export async function quickUpdateProductAction(id: string, patch: unknown) {
+  return adminRun("catalog.edit", (staff) => data.quickUpdateProduct(idSchema.parse(id), patch, staff));
+}
+
+/** Editor data for the product drawer ("new" for a blank product). */
+export async function productDrawerAction(id: string, locale: string) {
+  return adminRun(
+    "catalog.view",
+    async () => {
+      const l = z.enum(["ar", "en"]).parse(locale);
+      const d = await data.productEditorData(id === "new" ? null : idSchema.parse(id), l);
+      if (id !== "new" && !d.product) throw new AppError("not_found", 404);
+      return d;
+    },
+    { revalidate: false },
+  );
+}
+
+const listFilter = z.object({ q: z.string().max(200).optional(), status: z.string().max(20).optional(), brand: z.string().max(64).optional(), category: z.string().max(64).optional(), stock: z.string().max(20).optional() });
+
+/** Bulk operation on every product matching the list's current filters (capped at 2,000). */
+export async function bulkProductsMatchingAction(filter: unknown, op: unknown) {
+  return adminRun("catalog.edit", async (staff) => {
+    const where = await data.productWhere(listFilter.parse(filter));
+    const ids = (await db.product.findMany({ where, select: { id: true }, take: 2000 })).map((p) => p.id);
+    return bulkProducts(ids, op, staff);
+  });
+}
+
+/** Delete every product matching the current filters (capped at 2,000). */
+export async function deleteProductsMatchingAction(filter: unknown) {
+  return adminRun("catalog.delete", async (staff) => {
+    const where = await data.productWhere(listFilter.parse(filter));
+    const ids = (await db.product.findMany({ where, select: { id: true }, take: 2000 })).map((p) => p.id);
+    return deleteProducts(ids, staff);
+  });
 }

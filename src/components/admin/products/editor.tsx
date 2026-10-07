@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { ImagePlus, Loader2, Trash2, Wand2, Eye, Copy, Plus, X, AlertCircle, ScanBarcode, History } from "lucide-react";
+import { ImagePlus, Loader2, Trash2, Wand2, Eye, Copy, Plus, X, AlertCircle, ScanBarcode, History, MoreHorizontal, Archive, ClipboardCopy, Link2, ExternalLink } from "lucide-react";
+import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/menu";
+import { DrawerBody, DrawerFooter, DrawerHeader } from "../drawer";
 import { toast } from "sonner";
 import { Link, useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
@@ -79,9 +81,32 @@ const blank = (): ProductForm => ({
 const toLocalInput = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : "");
 const fromLocalInput = (v: string) => (v ? new Date(v).toISOString() : null);
 
-export function ProductEditor({ data }: { data: ProductEditorData }) {
+/**
+ * Product editor. Full page, or inside the products drawer (`layout="drawer"`):
+ * same tabs and fields, with the header actions in the drawer's sticky header
+ * and a sticky footer (Save · Save & close) instead of the floating save bar.
+ */
+export function ProductEditor({
+  data,
+  layout = "page",
+  context,
+  onSaved,
+  onClose,
+  onOpen,
+  onDirtyChange,
+}: {
+  data: ProductEditorData;
+  layout?: "page" | "drawer";
+  context?: string[];
+  onSaved?: () => void;
+  onClose?: () => void;
+  /** Drawer: switch to another product (after create or duplicate). */
+  onOpen?: (id: string) => void;
+  onDirtyChange?: (dirty: boolean) => void;
+}) {
   const { t, locale, money, fmt, can } = useAdmin();
   const router = useRouter();
+  const drawer = layout === "drawer";
   const lists: Lists = data.lists;
   const isNew = !data.product;
   const [p, setP] = useState<ProductForm>(data.product ?? blank());
@@ -101,6 +126,10 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
   };
 
   useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+
+  useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty) e.preventDefault();
     };
@@ -116,7 +145,7 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
   const attrById = useMemo(() => new Map(lists.attributes.map((a) => [a.id, a])), [lists.attributes]);
   const variantAttrs = p.attributes.filter((a) => a.usedForVariations);
 
-  const save = (overrides: Partial<ProductForm> = {}) => {
+  const save = (overrides: Partial<ProductForm> = {}, opts: { close?: boolean } = {}) => {
     setErrors({});
     const payload = {
       ...p,
@@ -130,7 +159,13 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
       if (r.ok) {
         toast.success(t("c.saved"));
         setDirty(false);
-        if (isNew) router.replace(`/admin/products/${r.data.id}`);
+        if (Object.keys(overrides).length) setP((prev) => ({ ...prev, ...overrides }));
+        if (drawer) {
+          router.refresh();
+          onSaved?.();
+          if (opts.close) onClose?.();
+          else if (isNew) onOpen?.(r.data.id);
+        } else if (isNew) router.replace(`/admin/products/${r.data.id}`);
         else router.refresh();
       } else {
         setErrors(r.fieldErrors ?? {});
@@ -160,8 +195,86 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
 
   const margin = p.costPrice && p.price ? Math.round(((p.price - p.costPrice) / p.price) * 100) : null;
 
+  const storeUrl = `/${locale}/product/${p.slug}${p.status !== "ACTIVE" ? "?preview=1" : ""}`;
+  const statusBadge = <Pill tone={p.status === "ACTIVE" ? "green" : p.status === "DRAFT" ? "neutral" : "amber"}>{t(p.status === "ACTIVE" ? "c.published" : p.status === "DRAFT" ? "c.draft" : "c.archived")}</Pill>;
+  const duplicate = () =>
+    start(async () => {
+      const r = await duplicateProductAction(p.id);
+      if (!r.ok) return void toast.error(t("c.error"));
+      toast.success(t("c.duplicate"));
+      if (drawer) {
+        router.refresh();
+        onOpen?.(r.data.id);
+      } else router.push(`/admin/products/${r.data.id}`);
+    });
+  // Drawer header: the most common actions visible, the rest in "more". Only what applies is shown.
+  const drawerActions = !isNew && (
+    <>
+      <Button asChild variant="outline" size="sm" leftIcon={<Eye />} className="max-sm:hidden">
+        <a href={storeUrl} target="_blank" rel="noopener">
+          {t("p.viewOnStore")}
+        </a>
+      </Button>
+      {can("catalog.edit") && (
+        <Button size="sm" variant={p.status === "ACTIVE" ? "outline" : "primary"} loading={pending} onClick={() => save({ status: p.status === "ACTIVE" ? "DRAFT" : "ACTIVE" })}>
+          {p.status === "ACTIVE" ? (locale === "ar" ? "إلغاء النشر" : "Unpublish") : locale === "ar" ? "نشر" : "Publish"}
+        </Button>
+      )}
+      <Dropdown>
+        <DropdownTrigger className="grid size-9 place-items-center rounded-lg border border-ad-border text-ad-muted transition hover:bg-ad-hover hover:text-ad-fg" aria-label={t("c.actions")}>
+          <MoreHorizontal className="size-4" />
+        </DropdownTrigger>
+        <DropdownContent align="end">
+          <DropdownItem asChild className="sm:hidden">
+            <a href={storeUrl} target="_blank" rel="noopener">
+              <Eye /> {t("p.viewOnStore")}
+            </a>
+          </DropdownItem>
+          {can("catalog.edit") && (
+            <DropdownItem onSelect={duplicate}>
+              <Copy /> {t("c.duplicate")}
+            </DropdownItem>
+          )}
+          {can("catalog.edit") && p.status !== "ARCHIVED" && (
+            <DropdownItem onSelect={() => save({ status: "ARCHIVED" })}>
+              <Archive /> {t("c.archived")}
+            </DropdownItem>
+          )}
+          {p.sku && (
+            <DropdownItem onSelect={() => (navigator.clipboard.writeText(p.sku), toast.success(t("c.copied")))}>
+              <ClipboardCopy /> {locale === "ar" ? "نسخ SKU" : "Copy SKU"}
+            </DropdownItem>
+          )}
+          <DropdownItem onSelect={() => (navigator.clipboard.writeText(`${window.location.origin}/${locale}/product/${p.slug}`), toast.success(t("c.copied")))}>
+            <Link2 /> {locale === "ar" ? "نسخ رابط المنتج" : "Copy product link"}
+          </DropdownItem>
+          <DropdownItem asChild>
+            <Link href={`/admin/products/${p.id}`}>
+              <ExternalLink /> {locale === "ar" ? "فتح المحرر الكامل" : "Open full editor"}
+            </Link>
+          </DropdownItem>
+          {can("catalog.delete") && (
+            <DropdownItem onSelect={() => setConfirmDelete(true)} className="text-red-600">
+              <Trash2 /> {t("c.delete")}
+            </DropdownItem>
+          )}
+        </DropdownContent>
+      </Dropdown>
+    </>
+  );
+  const title = isNew ? t("p.new") : p.name[locale] || p.name.en || p.name.ar;
+
   return (
     <>
+      {drawer ? (
+        <DrawerHeader
+          context={context}
+          title={title}
+          badges={!isNew && statusBadge}
+          subtitle={!isNew ? [p.sku && `SKU ${p.sku}`, `${locale === "ar" ? "آخر تعديل" : "Updated"} ${fmtDate(p.updatedAt, locale, true)}`].filter(Boolean).join(" · ") : undefined}
+          actions={drawerActions}
+        />
+      ) : (
       <PageHeader
         back={{ href: "/admin/products", label: t("p.title") }}
         title={isNew ? t("p.new") : p.name[locale] || p.name.en || p.name.ar}
@@ -186,8 +299,10 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
           )
         }
       />
+      )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <Body drawer={drawer}>
+      <div className={cn("grid gap-4", drawer ? "@5xl:grid-cols-[minmax(0,1fr)_300px]" : "xl:grid-cols-[minmax(0,1fr)_320px]")}>
         <div className="min-w-0">
           <nav className="no-scrollbar -mx-3 mb-4 flex gap-1 overflow-x-auto px-3 sm:mx-0 sm:px-0" role="tablist">
             {TABS.filter((k) => k !== "variants" || p.type === "VARIABLE").map((k) => {
@@ -359,7 +474,7 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
           )}
         </div>
 
-        <aside className="space-y-4 xl:sticky xl:top-20 xl:self-start">
+        <aside className={cn("space-y-4", drawer ? "@5xl:sticky @5xl:top-0 @5xl:self-start" : "xl:sticky xl:top-20 xl:self-start")}>
           <Panel title={t("c.status")}>
             <div className="space-y-4">
               <Select value={p.status} onChange={(e) => set("status", e.target.value as ProductForm["status"])}>
@@ -398,9 +513,29 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
           )}
         </aside>
       </div>
+      </Body>
+
+      {drawer && (
+        <DrawerFooter>
+          <span className={cn("flex min-w-0 flex-1 items-center gap-2 text-sm", !dirty && "invisible")}>
+            <AlertCircle className="size-4 shrink-0 text-amber-500" /> <span className="truncate max-sm:sr-only">{t("c.unsaved")}</span>
+          </span>
+          {!isNew && dirty && (
+            <Button variant="ghost" size="sm" onClick={() => (setP(data.product!), setVariants(data.product!.variants.map((v) => ({ ...v, key: v.id }))), setDirty(false))}>
+              {t("c.discard")}
+            </Button>
+          )}
+          <Button variant="outline" size="sm" loading={pending} disabled={!dirty && !isNew} onClick={() => save({}, { close: true })}>
+            {locale === "ar" ? "حفظ وإغلاق" : "Save & close"}
+          </Button>
+          <Button size="sm" loading={pending} disabled={!dirty && !isNew} onClick={() => save()}>
+            {t("c.save")}
+          </Button>
+        </DrawerFooter>
+      )}
 
       {/* Sticky save bar (always reachable, including on phones above the quick bar). */}
-      <div className={cn("fixed inset-x-3 bottom-20 z-30 mx-auto flex max-w-2xl items-center gap-3 rounded-2xl border border-ad-border bg-ad-panel p-2.5 ps-4 shadow-pop transition lg:bottom-6", dirty || isNew ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0")}>
+      <div className={cn(drawer && "hidden", "fixed inset-x-3 bottom-20 z-30 mx-auto flex max-w-2xl items-center gap-3 rounded-2xl border border-ad-border bg-ad-panel p-2.5 ps-4 shadow-pop transition lg:bottom-6", dirty || isNew ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0")}>
         <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
           <AlertCircle className="size-4 shrink-0 text-amber-500" /> <span className="truncate max-sm:sr-only">{t("c.unsaved")}</span>
         </span>
@@ -424,7 +559,12 @@ export function ProductEditor({ data }: { data: ProductEditorData }) {
           const r = await deleteProductsAction([p.id]);
           if (r.ok) {
             setDirty(false);
-            router.push("/admin/products");
+            if (drawer) {
+              setConfirmDelete(false);
+              toast.success(t("c.deleted"));
+              router.refresh();
+              onClose?.();
+            } else router.push("/admin/products");
           }
         }}
       />
@@ -992,4 +1132,9 @@ function VariantsTab({ p, set, lists, variants, setVariants, error }: { p: Produ
       </Panel>
     </div>
   );
+}
+
+/** Wraps the editor content in the drawer's scrolling body (no-op on the full page). */
+function Body({ drawer, children }: { drawer: boolean; children: React.ReactNode }) {
+  return drawer ? <DrawerBody>{children}</DrawerBody> : <>{children}</>;
 }

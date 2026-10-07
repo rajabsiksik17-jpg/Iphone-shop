@@ -11,6 +11,7 @@ import { RevenueChart, OrdersChart, Funnel } from "./charts";
 import { timeAgo } from "@/lib/time";
 import type { DashboardReport } from "@/server/analytics/report";
 import type { AdminKey } from "@/admin/i18n";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 export function DashboardView({ report, setup }: { report: DashboardReport; setup: { key: AdminKey; done: boolean; href: string }[] }) {
   const { t, fmt, user, counters, socket, locale, can } = useAdmin();
@@ -139,7 +140,7 @@ export function DashboardView({ report, setup }: { report: DashboardReport; setu
                   <span className="min-w-0 flex-1 truncate text-ad-muted">{o.customer}</span>
                   <ColorPill label={o.status.label} color={o.status.color} />
                   <span className="tabular hidden w-24 text-end font-medium sm:block">{fmt(o.total)}</span>
-                  <span className="hidden w-24 text-end text-xs text-ad-muted md:block">{timeAgo(o.placedAt, locale)}</span>
+                  <span className="hidden w-24 text-end text-xs text-ad-muted md:block"><TimeAgo date={o.placedAt} /></span>
                 </Link>
               </li>
             ))}
@@ -217,7 +218,7 @@ export function DashboardView({ report, setup }: { report: DashboardReport; setu
                   <span className="grid size-8 place-items-center rounded-full bg-ad-sunken text-xs font-semibold">{c.name.slice(0, 1)}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-medium">{c.name}</span>
-                    <span className="text-xs text-ad-muted">{timeAgo(c.createdAt, locale)}</span>
+                    <span className="text-xs text-ad-muted"><TimeAgo date={c.createdAt} /></span>
                   </span>
                   <span className="text-xs text-ad-muted">{t("o.ordersBy", { n: c.orders })}</span>
                 </Link>

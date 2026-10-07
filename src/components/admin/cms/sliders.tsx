@@ -7,7 +7,8 @@ import { useRouter } from "@/i18n/navigation";
 import { Button } from "@/components/ui/button";
 import { useAdmin } from "../admin-context";
 import { PageHeader, Panel, Pill, Segmented, Switch, ConfirmDialog, AdminEmpty } from "../ui";
-import { Label, TextInput, Select, LocalizedField, ImageField, ColorInput, FieldError, type MediaRef } from "../fields";
+import { Label, TextInput, Select, LocalizedField, ColorInput, FieldError } from "../fields";
+import { SlideArtwork, SlidePreview, resolveArt, type DeviceArt, type SlideArt } from "./slide-artwork";
 import { SectionTitle } from "../entity";
 import { SortableList } from "../sortable";
 import { saveSliderAction, deleteSliderAction } from "@/actions/admin/content";
@@ -17,7 +18,7 @@ import type { sliderList } from "@/server/admin/content";
 
 type SliderRow = Awaited<ReturnType<typeof sliderList>>[number];
 type SlideRow = SliderRow["slides"][number];
-type Slide = Omit<SlideRow, "desktopImage" | "mobileImage" | "id"> & { id?: string; key: string; desktopImage: MediaRef; mobileImage: MediaRef };
+type Slide = Omit<SlideRow, "desktopImage" | "tabletImage" | "mobileImage" | "localeImages" | "id"> & { id?: string; key: string } & SlideArt;
 type Form = { id: string | null; key: string; name: string; settings: SliderRow["settings"]; slides: Slide[] };
 
 const toLocalInput = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : "");
@@ -31,18 +32,20 @@ const blankSlide = (): Slide => ({
   startsAt: null,
   endsAt: null,
   desktopImage: null,
+  tabletImage: null,
   mobileImage: null,
+  localeImages: { ar: { desktop: null, tablet: null, mobile: null }, en: { desktop: null, tablet: null, mobile: null } },
   eyebrow: {},
   heading: {},
   body: {},
   primaryCta: { label: {}, href: "" },
   secondaryCta: { label: {}, href: "" },
-  style: { align: "start", vertical: "center", textColor: "#ffffff", overlay: "#000000", overlayOpacity: 35, background: "#0f172a", animation: "fade-up", buttonStyle: "solid" },
+  style: { align: "start", vertical: "center", textColor: "#ffffff", overlay: "#000000", overlayOpacity: 35, background: "#0f172a", animation: "fade-up", buttonStyle: "solid", headingSize: "md", mobileAlign: "inherit", mobileVertical: "inherit", showBodyOnMobile: false },
 });
 
 const toForm = (s: SliderRow | null): Form =>
   s
-    ? { id: s.id, key: s.key, name: s.name, settings: s.settings, slides: s.slides.map((x) => ({ ...x, key: x.id, desktopImage: x.desktopImage, mobileImage: x.mobileImage })) }
+    ? { id: s.id, key: s.key, name: s.name, settings: s.settings, slides: s.slides.map((x) => ({ ...x, key: x.id })) }
     : { id: null, key: "", name: "", settings: { autoplay: true, interval: 6000, transition: "fade", loop: true, showArrows: true, showDots: true }, slides: [blankSlide()] };
 
 export function SlidersView({ sliders }: { sliders: SliderRow[] }) {
@@ -75,7 +78,10 @@ export function SlidersView({ sliders }: { sliders: SliderRow[] }) {
         key: form.key,
         name: form.name,
         settings: form.settings,
-        slides: form.slides.map(({ key: _k, desktopImage, mobileImage, ...s }) => ({ ...s, desktopImageId: desktopImage?.id ?? null, mobileImageId: mobileImage?.id ?? null })),
+        slides: form.slides.map(({ key: _k, desktopImage, tabletImage, mobileImage, localeImages, ...s }) => {
+          const ids = (d: DeviceArt) => ({ desktop: d.desktop?.id ?? null, tablet: d.tablet?.id ?? null, mobile: d.mobile?.id ?? null });
+          return { ...s, desktopImageId: desktopImage?.id ?? null, tabletImageId: tabletImage?.id ?? null, mobileImageId: mobileImage?.id ?? null, localeImages: { ar: ids(localeImages.ar), en: ids(localeImages.en) } };
+        }),
       };
       const r = await saveSliderAction(form.id, payload);
       if (r.ok) {
@@ -98,7 +104,7 @@ export function SlidersView({ sliders }: { sliders: SliderRow[] }) {
     <>
       <PageHeader
         title={t("nav.sliders")}
-        description={locale === "ar" ? "شرائح بصور منفصلة لسطح المكتب والجوال، مع جدولة" : "Slides with separate desktop and mobile art, plus scheduling"}
+        description={locale === "ar" ? "شرائح بصور منفصلة لسطح المكتب والتابلت والجوال ولكل لغة، مع معاينة وجدولة" : "Slides with separate desktop, tablet and mobile art per language, with previews and scheduling"}
         actions={
           <Button variant="outline" leftIcon={<Plus />} onClick={() => pick(null)}>
             {t("cms.newSlider")}
@@ -175,7 +181,7 @@ export function SlidersView({ sliders }: { sliders: SliderRow[] }) {
                 <div className={cn(!s.isVisible && "opacity-60")}>
                   <div className="flex items-center gap-2 px-3 py-2.5">
                     {handle}
-                    {s.desktopImage?.url ? <img src={s.desktopImage.url} alt="" className="h-10 w-16 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-16 shrink-0 rounded-md" style={{ background: s.style.background }} />}
+                    {resolveArt(s, "desktop", locale === "ar" ? "ar" : "en")?.url ? <img src={resolveArt(s, "desktop", locale === "ar" ? "ar" : "en")!.url} alt="" className="h-10 w-16 shrink-0 rounded-md object-cover" /> : <span className="h-10 w-16 shrink-0 rounded-md" style={{ background: s.style.background }} />}
                     <button type="button" onClick={() => setOpen(open === s.key ? null : s.key)} className="flex min-w-0 flex-1 items-center gap-2 text-start" aria-expanded={open === s.key}>
                       <span className="min-w-0">
                         <span className="block truncate text-sm font-medium">{slideTitle(s, i)}</span>
@@ -200,10 +206,8 @@ export function SlidersView({ sliders }: { sliders: SliderRow[] }) {
                   </div>
                   {open === s.key && (
                     <div className="space-y-5 border-t border-ad-border bg-ad-sunken/40 p-4">
-                      <div className="grid gap-4 sm:grid-cols-[2fr_1fr]">
-                        <ImageField label={t("cms.desktopImage")} value={s.desktopImage} onChange={(v) => setSlide(s.key, { desktopImage: v })} folder="slides" aspect="aspect-[16/7]" />
-                        <ImageField label={t("cms.mobileImage")} value={s.mobileImage} onChange={(v) => setSlide(s.key, { mobileImage: v })} folder="slides" aspect="aspect-[4/5]" />
-                      </div>
+                      <SlideArtwork value={s} onChange={(patch) => setSlide(s.key, patch)} />
+                      <SlidePreview slide={s} />
                       <LocalizedField label={t("cms.eyebrow")} value={s.eyebrow as LocalizedText} onChange={(v) => setSlide(s.key, { eyebrow: v as Record<string, string> })} />
                       <LocalizedField label={t("cms.heading")} value={s.heading as LocalizedText} onChange={(v) => setSlide(s.key, { heading: v as Record<string, string> })} />
                       <LocalizedField label={t("cms.body")} value={s.body as LocalizedText} onChange={(v) => setSlide(s.key, { body: v as Record<string, string> })} multiline rows={2} />
@@ -225,6 +229,19 @@ export function SlidersView({ sliders }: { sliders: SliderRow[] }) {
                         <div>
                           <Label>{t("cms.vertical")}</Label>
                           <Segmented size="sm" value={s.style.vertical} onChange={(v) => setStyle(s.key, { vertical: v })} options={(["top", "center", "bottom"] as const).map((v) => ({ value: v, label: locale === "ar" ? { top: "أعلى", center: "وسط", bottom: "أسفل" }[v] : v[0].toUpperCase() + v.slice(1) }))} />
+                        </div>
+                        <div>
+                          <Label>{locale === "ar" ? "حجم العنوان" : "Heading size"}</Label>
+                          <Segmented size="sm" value={s.style.headingSize} onChange={(v) => setStyle(s.key, { headingSize: v })} options={[{ value: "sm", label: locale === "ar" ? "صغير" : "Small" }, { value: "md", label: locale === "ar" ? "متوسط" : "Medium" }, { value: "lg", label: locale === "ar" ? "كبير" : "Large" }]} />
+                        </div>
+                        <Switch checked={s.style.showBodyOnMobile} onCheckedChange={(v) => setStyle(s.key, { showBodyOnMobile: v })} label={locale === "ar" ? "إظهار الوصف على الجوال" : "Show description on phones"} />
+                        <div>
+                          <Label hint={locale === "ar" ? "الجوال" : "Phones"}>{t("cms.textAlign")}</Label>
+                          <Segmented size="sm" value={s.style.mobileAlign} onChange={(v) => setStyle(s.key, { mobileAlign: v })} options={(["inherit", "start", "center", "end"] as const).map((v) => ({ value: v, label: v === "inherit" ? (locale === "ar" ? "كالأساسي" : "Same") : v === "start" ? t("cms.align.start") : v === "center" ? t("cms.align.center") : locale === "ar" ? "النهاية" : "End" }))} />
+                        </div>
+                        <div>
+                          <Label hint={locale === "ar" ? "الجوال" : "Phones"}>{t("cms.vertical")}</Label>
+                          <Segmented size="sm" value={s.style.mobileVertical} onChange={(v) => setStyle(s.key, { mobileVertical: v })} options={(["inherit", "top", "center", "bottom"] as const).map((v) => ({ value: v, label: v === "inherit" ? (locale === "ar" ? "كالأساسي" : "Same") : locale === "ar" ? { top: "أعلى", center: "وسط", bottom: "أسفل" }[v] : v[0].toUpperCase() + v.slice(1) }))} />
                         </div>
                         <div>
                           <Label>{t("cms.textColor")}</Label>

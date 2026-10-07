@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Check, Truck, ExternalLink } from "lucide-react";
 import { db } from "@/server/db";
+import { paymentMethodTitle } from "@/server/integrations/registry";
 import { customerOrRedirect } from "@/server/auth/page-guards";
 import { formatBase } from "@/server/commerce/currency";
 import { Link } from "@/i18n/navigation";
@@ -26,7 +27,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ locale
   const statuses = await db.orderStatus.findMany();
   const label = (k: string) => tr(statuses.find((s) => s.key === k)?.label, locale) || k;
   const fmt = (n: number) => formatBase(n, locale);
-  const dateFmt = (d: Date) => d.toLocaleString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
+  const dateFmt = (d: Date) => d.toLocaleString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium", timeStyle: "short" });
   const address = order.shippingAddress as Record<string, string>;
   const reorderable = order.items.filter((i) => i.productId && i.product?.status === "ACTIVE");
 
@@ -141,7 +142,7 @@ export default async function OrderDetail({ params }: { params: Promise<{ locale
               <span dir="ltr">{address.phone}</span>
             </p>
             <h3 className="mb-1 mt-4 font-semibold">{t("order.paymentMethod")}</h3>
-            <p className="text-fg/80">{order.paymentMethod}</p>
+            <p className="text-fg/80">{paymentMethodTitle(order.paymentMethod, null, locale)}</p>
           </div>
         </div>
       </div>

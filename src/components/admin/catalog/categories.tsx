@@ -11,7 +11,8 @@ import { PageHeader, Panel, Pill, Switch, ConfirmDialog, AdminEmpty } from "../u
 import { Label, LocalizedField, Select, TextInput, ImageField, type MediaRef } from "../fields";
 import { IconPicker, IconPreview } from "../icon-picker";
 import { EditSheet, SeoFields, SectionTitle, emptySeo, type SeoValue } from "../entity";
-import { saveCategoryAction, deleteCategoryAction, reorderCategoriesAction } from "@/actions/admin/catalog";
+import { saveCategoryAction, deleteCategoryAction, reorderCategoriesAction, bulkCategoriesAction } from "@/actions/admin/catalog";
+import { BulkActions, SelectBox, visibilityOps } from "../bulk-actions";
 import { slugify, cn } from "@/lib/utils";
 import type { adminCategories } from "@/server/admin/catalog";
 
@@ -30,6 +31,15 @@ export function CategoriesManager({ data }: { data: Data }) {
   const [del, setDel] = useState<Row | null>(null);
   const [pending, start] = useTransition();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSel = (id: string) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const editable = can("catalog.edit");
 
   const open = (r: Row) =>
     setForm({ id: r.id, name: r.name, slug: r.slug, parentId: r.parentId, description: r.description, icon: r.icon, image: r.image, banner: r.banner, isActive: r.isActive, isFeatured: r.isFeatured, attributeIds: r.attributeIds, seo: r.seo });
@@ -120,12 +130,25 @@ export function CategoriesManager({ data }: { data: Data }) {
         {!data.rows.length ? (
           <AdminEmpty icon={<FolderTree />} action={<Button size="sm" onClick={() => setForm(blank())}>{t("cat.new")}</Button>} />
         ) : (
+          <>
+          {editable && (
+            <div className="flex items-center gap-3 border-b border-ad-border px-4 py-2.5 text-xs text-ad-muted">
+              <SelectBox
+                checked={selected.size === data.rows.length}
+                indeterminate={selected.size > 0 && selected.size < data.rows.length}
+                onChange={() => setSelected(selected.size === data.rows.length ? new Set() : new Set(data.rows.map((r) => r.id)))}
+                label={t("c.selectAll")}
+              />
+              {selected.size ? t("c.selected", { n: selected.size }) : t("c.selectAll")}
+            </div>
+          )}
           <ul className="divide-y divide-ad-border">
             {visible.map((r) => {
               const siblings = data.rows.filter((x) => x.parentId === r.parentId);
               const idx = siblings.findIndex((x) => x.id === r.id);
               return (
-                <li key={r.id} className={cn("group flex items-center gap-2 py-2.5 pe-3", !r.isActive && "opacity-60")} style={{ paddingInlineStart: `${12 + r.depth * 22}px` }}>
+                <li key={r.id} className={cn("group flex items-center gap-2 py-2.5 pe-3", !r.isActive && "opacity-60", selected.has(r.id) && "bg-ad-accent/5")} style={{ paddingInlineStart: `${12 + r.depth * 22}px` }}>
+                  {editable && <SelectBox checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} label={`${t("c.selectRow")}: ${r.label}`} />}
                   {r.children > 0 ? (
                     <button type="button" onClick={() => setCollapsed((c) => { const n = new Set(c); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} className="grid size-6 place-items-center rounded text-ad-muted hover:bg-ad-hover" aria-label="Toggle" aria-expanded={!collapsed.has(r.id)}>
                       <ChevronDown className={cn("size-4 transition", collapsed.has(r.id) && "-rotate-90 rtl:rotate-90")} />
@@ -175,9 +198,17 @@ export function CategoriesManager({ data }: { data: Data }) {
               );
             })}
           </ul>
+          </>
         )}
       </Panel>
 
+      <BulkActions
+        selected={selected}
+        onClear={() => setSelected(new Set())}
+        ops={visibilityOps(locale, can("catalog.delete"))}
+        run={bulkCategoriesAction as (ids: string[], op: string) => ReturnType<typeof bulkCategoriesAction>}
+        noun={locale === "ar" ? { one: "تصنيف", many: "تصنيفات" } : { one: "category", many: "categories" }}
+      />
       <EditSheet open={Boolean(form)} onOpenChange={(o) => !o && setForm(null)} title={form?.id ? `${t("c.edit")}: ${form.name[locale] || form.name.en || ""}` : t("cat.new")} onSave={save} saving={pending} wide>
         {form && (
           <>

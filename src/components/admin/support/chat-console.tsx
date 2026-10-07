@@ -228,7 +228,7 @@ export function ChatConsole({ initial }: { initial: ChatInbox }) {
                   <span className="flex items-center gap-1.5">
                     <span className={cn("truncate text-sm", c.unread && c.status !== "WAITING" ? "font-semibold" : "font-medium")}>{c.name ?? t("chat.guest")}</span>
                     {c.isGuest && <Pill className="!px-1.5 !py-0 text-[10px]">{t("chat.guest")}</Pill>}
-                    <span className="ms-auto shrink-0 text-[11px] text-ad-muted">{c.status === "WAITING" ? t("chat.waitingFor", { t: elapsed(c.createdAt) }) : timeAgo(c.lastMessageAt, locale)}</span>
+                    <span className="ms-auto shrink-0 text-[11px] text-ad-muted" suppressHydrationWarning>{c.status === "WAITING" ? t("chat.waitingFor", { t: elapsed(c.createdAt) }) : timeAgo(c.lastMessageAt, locale)}</span>
                   </span>
                   <span className="block truncate text-xs text-ad-muted">{c.subject}</span>
                   {c.preview && <span className={cn("mt-0.5 block truncate text-xs", c.unread && c.status !== "WAITING" ? "text-ad-fg" : "text-ad-muted")}>{c.preview.sender === "AGENT" ? `↩ ${c.preview.body}` : c.preview.body}</span>}

@@ -11,6 +11,7 @@ import { revokeSessionAction } from "@/actions/admin/system";
 import { fmtDate, timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { securityData, LogTab } from "@/server/admin/system";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type Data = Awaited<ReturnType<typeof securityData>>;
 const TABS: LogTab[] = ["audit", "logins", "sessions", "system", "deliveries", "payments"];
@@ -39,7 +40,7 @@ export function SecurityView({ data }: { data: Data }) {
   const rows = data.rows as Record<string, unknown>[];
 
   const row = (r: Record<string, unknown>): React.ReactNode => {
-    const at = <span className="shrink-0 text-xs text-ad-muted" title={fmtDate(String(r.at ?? r.lastSeenAt), locale, true)}>{timeAgo(String(r.at ?? r.lastSeenAt), locale)}</span>;
+    const at = <span className="shrink-0 text-xs text-ad-muted" title={fmtDate(String(r.at ?? r.lastSeenAt), locale, true)}><TimeAgo date={String(r.at ?? r.lastSeenAt)} /></span>;
     switch (data.tab) {
       case "audit":
         return (

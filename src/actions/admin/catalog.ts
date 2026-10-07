@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { db } from "@/server/db";
 import { saveCategory, deleteCategory, reorderCategories, saveBrand, deleteBrand, reorderBrands, saveAttribute, deleteAttribute, saveAttributeGroup } from "@/server/admin/catalog";
+import { bulkCategories, bulkBrands } from "@/server/admin/bulk";
 import { adminRun } from "./_base";
 import { idSchema } from "../helpers";
 
@@ -37,4 +38,12 @@ export async function saveAttributeGroupAction(id: string | null, input: unknown
 }
 export async function deleteAttributeGroupAction(id: string) {
   return adminRun("catalog.delete", async () => void (await db.attributeGroup.delete({ where: { id: idSchema.parse(id) } })));
+}
+
+export async function bulkCategoriesAction(ids: string[], op: "show" | "hide" | "feature" | "unfeature" | "delete") {
+  return adminRun(op === "delete" ? "catalog.delete" : "catalog.edit", (s) => bulkCategories(ids, op, s));
+}
+
+export async function bulkBrandsAction(ids: string[], op: "show" | "hide" | "feature" | "unfeature" | "delete") {
+  return adminRun(op === "delete" ? "catalog.delete" : "catalog.edit", (s) => bulkBrands(ids, op, s));
 }

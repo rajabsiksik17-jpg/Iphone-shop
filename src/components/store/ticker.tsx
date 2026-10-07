@@ -1,5 +1,5 @@
 import { Link } from "@/i18n/navigation";
-import { CmsIcon } from "@/components/ui/icon";
+import { ServerIcon } from "@/components/icons/server-icon";
 import type { Settings } from "@/server/settings/schemas";
 
 const SEPARATORS = { dot: "•", diamond: "◆", slash: "/", none: "" } as const;
@@ -10,7 +10,7 @@ const SEPARATORS = { dot: "•", diamond: "◆", slash: "/", none: "" } as const
  * enters from the end edge in both LTR and RTL. Pauses on hover; collapses
  * to a static wrapped list under prefers-reduced-motion.
  */
-export function Ticker({ items, settings, dir }: { items: { id: string; text: string; url: string | null; icon: string | null }[]; settings: Settings<"ticker">; dir: "rtl" | "ltr" }) {
+export function Ticker({ items, settings, dir, svgs }: { items: { id: string; text: string; url: string | null; icon: string | null }[]; settings: Settings<"ticker">; dir: "rtl" | "ltr"; svgs?: Record<string, string> }) {
   if (!settings.enabled || !items.length) return null;
   const sep = SEPARATORS[settings.separator];
   const reverse = settings.direction === "reverse";
@@ -26,12 +26,12 @@ export function Ticker({ items, settings, dir }: { items: { id: string; text: st
         <li key={a.id + i} className="flex items-center whitespace-nowrap">
           {a.url ? (
             <Link href={a.url} tabIndex={hidden ? -1 : undefined} className="flex items-center gap-2 px-6 hover:underline">
-              {a.icon && <CmsIcon name={a.icon} className="size-4 opacity-80" />}
+              {a.icon && <ServerIcon value={a.icon} customSvgs={svgs} className="size-4 opacity-80" />}
               {a.text}
             </Link>
           ) : (
             <span className="flex items-center gap-2 px-6">
-              {a.icon && <CmsIcon name={a.icon} className="size-4 opacity-80" />}
+              {a.icon && <ServerIcon value={a.icon} customSvgs={svgs} className="size-4 opacity-80" />}
               {a.text}
             </span>
           )}

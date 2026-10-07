@@ -11,7 +11,8 @@ import { PageHeader, Panel, DataTable, Pill, Switch, AdminEmpty, ConfirmDialog, 
 import { Label, TextInput, TextArea, Select, LocalizedField, MoneyInput, FieldError } from "../fields";
 import { EditSheet, SectionTitle } from "../entity";
 import { ProductPicker, type PickedProduct } from "../product-picker";
-import { saveCouponAction, deleteCouponAction } from "@/actions/admin/operations";
+import { saveCouponAction, deleteCouponAction, bulkCouponsAction } from "@/actions/admin/operations";
+import { BulkActions } from "../bulk-actions";
 import { fmtDate } from "@/lib/time";
 import type { couponList } from "@/server/admin/operations";
 
@@ -60,6 +61,7 @@ export function CouponsView({ data }: { data: Data }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<Row | null>(null);
   const [pending, start] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const filter = sp.get("state") ?? "";
   const [picked, setPicked] = useState<PickedProduct[]>([]);
 
@@ -145,6 +147,9 @@ export function CouponsView({ data }: { data: Data }) {
         <DataTable
           rows={rows}
           onRowClick={(r) => open(r)}
+          selectable
+          selected={selected}
+          onSelectedChange={setSelected}
           empty={
             <AdminEmpty
               icon={<TicketPercent />}
@@ -195,6 +200,17 @@ export function CouponsView({ data }: { data: Data }) {
         />
       </Panel>
 
+      <BulkActions
+        selected={selected}
+        onClear={() => setSelected(new Set())}
+        ops={[
+          { key: "activate", label: locale === "ar" ? "تفعيل" : "Activate" },
+          { key: "deactivate", label: locale === "ar" ? "إيقاف" : "Deactivate" },
+          { key: "delete", label: locale === "ar" ? "حذف" : "Delete", danger: true },
+        ]}
+        run={bulkCouponsAction as (ids: string[], op: string) => ReturnType<typeof bulkCouponsAction>}
+        noun={locale === "ar" ? { one: "كوبون", many: "كوبونات" } : { one: "coupon", many: "coupons" }}
+      />
       <EditSheet
         open={Boolean(editing)}
         onOpenChange={(o) => !o && close()}

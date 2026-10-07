@@ -2,6 +2,7 @@ import type { Messages } from "./en";
 
 const ar: Messages = {
   common: {
+    breadcrumb: "مسار التنقل",
     home: "الرئيسية",
     shop: "المتجر",
     search: "بحث",
@@ -63,7 +64,15 @@ const ar: Messages = {
     darkMode: "الوضع الداكن",
     lightMode: "الوضع الفاتح",
   },
+  legal: {
+    onThisPage: "في هذه الصفحة",
+    lastUpdated: "آخر تحديث: {date}",
+    related: "سياسات ذات صلة",
+    questions: "لديك سؤال حول هذه السياسة؟",
+    contact: "تواصل معنا",
+  },
   header: {
+    productCount: "{count, plural, =0 {لا منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتجاً} other {# منتج}}",
     shopAll: "تسوّق كل {name}",
     searchCurrency: "ابحث عن عملة…",
     currency: "العملة: {code}",
@@ -180,6 +189,10 @@ const ar: Messages = {
     showAll: "عرض كل التقييمات",
   },
   listing: {
+    emptyCategory: "لا توجد منتجات هنا بعد",
+    emptyCategoryHint: "نضيف منتجات جديدة باستمرار — تصفّح تصنيفاتنا الأخرى في الأثناء.",
+    keepExploring: "استكشف المزيد",
+    browseAll: "تصفّح كل المنتجات",
     filters: "الفلاتر",
     filter: "فلترة",
     sort: "ترتيب",
@@ -299,9 +312,8 @@ const ar: Messages = {
     testMode: "وضع الاختبار",
     notes: "ملاحظات الطلب",
     notesPlaceholder: "تعليمات التوصيل، رسالة هدية…",
-    terms: "أوافق على {terms} و{privacy}",
-    termsLink: "الشروط والأحكام",
-    privacyLink: "سياسة الخصوصية",
+    terms: "أوافق على <terms>الشروط والأحكام</terms> وأقرّ بالاطلاع على <privacy>سياسة الخصوصية</privacy>",
+    termsRequired: "يرجى الموافقة على الشروط والأحكام لإتمام الطلب",
     marketing: "أرسلوا لي العروض الحصرية والمنتجات الجديدة",
     placeOrder: "تأكيد الطلب · {total}",
     payNow: "ادفع {total}",
@@ -422,7 +434,7 @@ const ar: Messages = {
     hidePassword: "إخفاء كلمة المرور",
     passwordHint: "{min} أحرف على الأقل، مع مزيج من الحروف والأرقام.",
     marketingOptIn: "أرسلوا لي العروض والمنتجات الجديدة",
-    agree: "بإنشاء حساب، أنت توافق على {terms} و{privacy}.",
+    agree: "بإنشاء حساب، أنت توافق على <terms>الشروط والأحكام</terms> و<privacy>سياسة الخصوصية</privacy>.",
   },
   footer: {
     shop: "تسوّق",
@@ -440,6 +452,8 @@ const ar: Messages = {
     weAccept: "نقبل",
   },
   contact: {
+    directions: "الاتجاهات على الخريطة",
+    closed: "مغلق",
     title: "تواصل معنا",
     name: "الاسم",
     email: "البريد الإلكتروني",

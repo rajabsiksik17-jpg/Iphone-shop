@@ -16,7 +16,7 @@ import { CouponBox, PointsBox, SummaryLines } from "./order-summary";
 import { cn } from "@/lib/utils";
 import type { CartTotals } from "@/server/commerce/cart";
 
-export function CartPageView({ initial }: { initial: CartTotals }) {
+export function CartPageView({ initial, icons }: { initial: CartTotals; icons?: Partial<Record<"delivery" | "warranty" | "returns" | "payment", React.ReactNode>> }) {
   const t = useTranslations();
   const { format } = useStore();
   const { totals: live, refresh, update, remove, pending } = useCart();
@@ -108,13 +108,13 @@ export function CartPageView({ initial }: { initial: CartTotals }) {
         </div>
         <ul className="mt-5 space-y-3 text-sm text-muted">
           <li className="flex items-center gap-3">
-            <ShieldCheck className="size-4" /> {t("product.genuine")}
+            {icons?.warranty ?? <ShieldCheck className="size-4" />} {t("product.genuine")}
           </li>
           <li className="flex items-center gap-3">
-            <RotateCcw className="size-4" /> {t("product.returns")}
+            {icons?.returns ?? <RotateCcw className="size-4" />} {t("product.returns")}
           </li>
           <li className="flex items-center gap-3">
-            <Truck className="size-4" /> {t("product.securePay")}
+            {icons?.payment ?? <Lock className="size-4" />} {t("product.securePay")}
           </li>
         </ul>
       </aside>

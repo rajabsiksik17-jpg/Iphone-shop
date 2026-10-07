@@ -1,5 +1,6 @@
 const en = {
   common: {
+    breadcrumb: "Breadcrumb",
     home: "Home",
     shop: "Shop",
     search: "Search",
@@ -61,7 +62,15 @@ const en = {
     darkMode: "Dark mode",
     lightMode: "Light mode",
   },
+  legal: {
+    onThisPage: "On this page",
+    lastUpdated: "Last updated {date}",
+    related: "Related policies",
+    questions: "Questions about this policy?",
+    contact: "Contact us",
+  },
   header: {
+    productCount: "{count, plural, one {# product} other {# products}}",
     shopAll: "Shop all {name}",
     searchCurrency: "Search currencies…",
     currency: "Currency: {code}",
@@ -178,6 +187,10 @@ const en = {
     showAll: "Show all reviews",
   },
   listing: {
+    emptyCategory: "No products here yet",
+    emptyCategoryHint: "New products are added regularly — explore our other categories in the meantime.",
+    keepExploring: "Keep exploring",
+    browseAll: "Browse all products",
     filters: "Filters",
     filter: "Filter",
     sort: "Sort",
@@ -297,9 +310,8 @@ const en = {
     testMode: "Test mode",
     notes: "Order notes",
     notesPlaceholder: "Delivery instructions, gift message…",
-    terms: "I agree to the {terms} and {privacy}",
-    termsLink: "Terms & Conditions",
-    privacyLink: "Privacy Policy",
+    terms: "I agree to the <terms>Terms & Conditions</terms> and acknowledge the <privacy>Privacy Policy</privacy>",
+    termsRequired: "Please accept the Terms & Conditions to place your order",
     marketing: "Email me exclusive offers and new arrivals",
     placeOrder: "Place order · {total}",
     payNow: "Pay {total}",
@@ -420,7 +432,7 @@ const en = {
     hidePassword: "Hide password",
     passwordHint: "At least {min} characters, mixing letters and numbers.",
     marketingOptIn: "Send me offers and new arrivals",
-    agree: "By creating an account you agree to our {terms} and {privacy}.",
+    agree: "By creating an account you agree to our <terms>Terms & Conditions</terms> and <privacy>Privacy Policy</privacy>.",
   },
   footer: {
     shop: "Shop",
@@ -438,6 +450,8 @@ const en = {
     weAccept: "We accept",
   },
   contact: {
+    directions: "Get directions",
+    closed: "Closed",
     title: "Contact us",
     name: "Name",
     email: "Email",

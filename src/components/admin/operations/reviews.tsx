@@ -13,6 +13,7 @@ import { moderateReviewAction, bulkModerateAction } from "@/actions/admin/operat
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { reviewList } from "@/server/admin/operations";
+import { TimeAgo } from "@/components/ui/time-ago";
 
 type Data = Awaited<ReturnType<typeof reviewList>>;
 const TONE = { PENDING: "amber", APPROVED: "green", REJECTED: "neutral", SPAM: "red" } as const;
@@ -85,7 +86,7 @@ export function ReviewsView({ data }: { data: Data }) {
                     {r.body}
                   </p>
                   <p className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-ad-muted">
-                    <span className="font-medium text-ad-fg/80">{r.author}</span>·<span>{timeAgo(r.createdAt, locale)}</span>·
+                    <span className="font-medium text-ad-fg/80">{r.author}</span>·<span><TimeAgo date={r.createdAt} /></span>·
                     <Link href={`/admin/products/${r.product.id}`} className="hover:underline">
                       {r.product.name}
                     </Link>

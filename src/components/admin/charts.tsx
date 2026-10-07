@@ -20,11 +20,11 @@ function TooltipBox({ active, payload, label, format }: { active?: boolean; payl
   );
 }
 
-const shortDate = (s: string, locale: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`).toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { day: "numeric", month: "short" }) : s);
+const shortDate = (s: string, locale: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`).toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { day: "numeric", month: "short" }) : s);
 
 export function RevenueChart({ data, height = 280 }: { data: { label: string; revenue: number; previous: number }[]; height?: number }) {
   const { fmt, locale, t } = useAdmin();
-  const compact = (v: number) => new Intl.NumberFormat(locale === "ar" ? "ar-JO" : "en", { notation: "compact", maximumFractionDigits: 1 }).format(v / 1000);
+  const compact = (v: number) => new Intl.NumberFormat(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en", { notation: "compact", maximumFractionDigits: 1 }).format(v / 1000);
   return (
     <ResponsiveContainer width="100%" height={height}>
       <AreaChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>

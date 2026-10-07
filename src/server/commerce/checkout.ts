@@ -13,7 +13,7 @@ import { getSettings } from "../settings/service";
 import { getCurrentUser } from "../auth/session";
 import { applyStockChange, afterStockChange } from "../catalog/inventory";
 import { activeIntegration } from "../integrations/service";
-import { getPaymentProvider } from "../integrations/registry";
+import { paymentMethodTitle, getPaymentProvider } from "../integrations/registry";
 import { recordPaymentLog } from "../payments/service";
 import { baseCurrency, converter } from "./currency";
 import { clearCart, computeCart, findCart } from "./cart";
@@ -68,7 +68,7 @@ export async function availablePaymentMethods(locale: string, total: number) {
       const cfg = r.config as Record<string, string>;
       return {
         key: r.key,
-        title: cfg[`title_${locale}`] || cfg.title_en || def.name,
+        title: paymentMethodTitle(r.key, cfg, locale),
         instructions: cfg[`instructions_${locale}`] || cfg.instructions_en || "",
         icon: def.icon,
         online: r.key !== "cod" && r.key !== "bank_transfer",

@@ -8,6 +8,7 @@ import { emailLayout, escapeHtml } from "@/server/email/render";
 import { audit } from "@/server/audit";
 import { t } from "@/lib/i18n-text";
 import * as data from "@/server/admin/settings-data";
+import * as storeType from "@/server/admin/store-type";
 import { adminRun } from "./_base";
 
 const groupSchema = z.enum(Object.keys(settingsSchemas) as [SettingsGroup, ...SettingsGroup[]]);
@@ -102,4 +103,20 @@ export async function saveFxSettingsAction(input: unknown) {
 /** Fetch exchange rates now (ignores the schedule). */
 export async function refreshRatesAction() {
   return adminRun("settings.general", (s) => data.refreshRatesNow(s));
+}
+
+export async function planStoreTypeAction(key: string, locale: string) {
+  return adminRun("settings.general", () => storeType.planPreset(z.string().max(40).parse(key), z.enum(["ar", "en"]).parse(locale)), { revalidate: false });
+}
+
+export async function applyStoreTypeAction(key: string, options: unknown) {
+  return adminRun(["settings.general", "catalog.edit"], (s) => storeType.applyPreset(z.string().max(40).parse(key), options, s));
+}
+
+export async function saveStoreTypeAction(input: unknown) {
+  return adminRun("settings.general", (s) => storeType.saveStoreType(input, s));
+}
+
+export async function setCardAttributesAction(ids: string[]) {
+  return adminRun("catalog.edit", (s) => storeType.setCardAttributes(ids, s));
 }

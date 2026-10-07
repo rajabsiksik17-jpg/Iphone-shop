@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import path from "node:path";
+import { LEGACY_PAGE_SLUGS } from "./src/config/legal";
 const dev = process.env.NODE_ENV !== "production";
 
 /**
@@ -44,6 +45,13 @@ const config: NextConfig = {
     // Media renditions are generated at upload time (see server/media), so the
     // runtime optimiser is only used for remote images if ever configured.
     unoptimized: true,
+  },
+  async redirects() {
+    // Information pages moved to descriptive URLs; keep old links and search results working.
+    return Object.entries(LEGACY_PAGE_SLUGS).flatMap(([from, to]) => [
+      { source: `/:locale(ar|en)/${from}`, destination: `/:locale/${to}`, permanent: true },
+      { source: `/${from}`, destination: `/${to}`, permanent: true },
+    ]);
   },
   async headers() {
     return [{ source: "/:path*", headers: [{ key: "Content-Security-Policy", value: csp }] }];

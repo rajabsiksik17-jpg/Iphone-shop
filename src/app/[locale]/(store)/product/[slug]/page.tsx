@@ -1,4 +1,5 @@
 import { KeySpecs, SpecsTable } from "@/components/store/product/specs";
+import { trustIcons } from "@/components/store/trust-icons";
 import { customSvgsFor } from "@/server/icons";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -84,8 +85,8 @@ export default async function ProductPage({ params, searchParams }: Props) {
         })}
       />
       <div className="container-store pt-6">
-        <Breadcrumbs items={[...product.breadcrumbs, { label: product.name, href: `/product/${product.slug}` }]} className="mb-6" />
-        <ProductPurchase product={product} shippingNote={shippingNote} />
+        <Breadcrumbs items={[...product.breadcrumbs, { label: product.name, href: `/product/${product.slug}` }]} className="mb-6" inShop />
+        <ProductPurchase product={product} shippingNote={shippingNote} icons={await trustIcons()} />
       </div>
 
       {product.highlights.length > 0 && (
@@ -167,7 +168,7 @@ export default async function ProductPage({ params, searchParams }: Props) {
                     <p className="mt-2 text-[15px] leading-relaxed text-fg/80">{r.body}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-x-3 text-xs text-muted">
                       <span className="font-medium text-fg/80">{r.authorName}</span>
-                      <span>{r.createdAt.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium" })}</span>
+                      <span>{r.createdAt.toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium" })}</span>
                       {r.isVerifiedPurchase && (
                         <span className="flex items-center gap-1 text-success">
                           <BadgeCheck className="size-3.5" /> {t("reviews.verified")}

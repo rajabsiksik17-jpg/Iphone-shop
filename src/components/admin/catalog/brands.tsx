@@ -11,7 +11,8 @@ import { PageHeader, Switch, ConfirmDialog, AdminEmpty } from "../ui";
 import { Label, LocalizedField, TextInput, ImageField, type MediaRef } from "../fields";
 import { EditSheet, SeoFields, SectionTitle, emptySeo, type SeoValue } from "../entity";
 import { SortableList } from "../sortable";
-import { saveBrandAction, deleteBrandAction, reorderBrandsAction } from "@/actions/admin/catalog";
+import { saveBrandAction, deleteBrandAction, reorderBrandsAction, bulkBrandsAction } from "@/actions/admin/catalog";
+import { BulkActions, SelectBox, visibilityOps } from "../bulk-actions";
 import { slugify, cn } from "@/lib/utils";
 import type { adminBrands } from "@/server/admin/catalog";
 
@@ -26,6 +27,8 @@ export function BrandsManager({ rows: initial }: { rows: Row[] }) {
   const [form, setForm] = useState<Form | null>(null);
   const [del, setDel] = useState<Row | null>(null);
   const [pending, start] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const editable = can("catalog.edit");
   useEffect(() => setRows(initial), [initial]);
 
   const open = (b: Row) => setForm({ id: b.id, name: b.name, slug: b.slug, description: b.description, logo: b.logo, banner: b.banner, website: b.website, isActive: b.isActive, isFeatured: b.isFeatured, seo: b.seo });
@@ -51,7 +54,25 @@ export function BrandsManager({ rows: initial }: { rows: Row[] }) {
 
   return (
     <>
-      <PageHeader title={t("brand.title")} description={locale === "ar" ? "اسحب البطاقات لإعادة ترتيب ظهورها في المتجر" : "Drag cards to set their order on the store"} actions={can("catalog.edit") && <Button size="sm" leftIcon={<Plus />} onClick={() => setForm(blank())}>{t("brand.new")}</Button>} />
+      <PageHeader
+        title={t("brand.title")}
+        description={locale === "ar" ? "اسحب البطاقات لإعادة ترتيب ظهورها في المتجر" : "Drag cards to set their order on the store"}
+        actions={
+          editable && (
+            <>
+              {rows.length > 0 && (
+                <label className="flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-ad-border px-3 text-[13px]">
+                  <SelectBox checked={selected.size === rows.length} indeterminate={selected.size > 0 && selected.size < rows.length} onChange={() => setSelected(selected.size === rows.length ? new Set() : new Set(rows.map((r) => r.id)))} label={t("c.selectAll")} />
+                  {selected.size ? t("c.selected", { n: selected.size }) : t("c.selectAll")}
+                </label>
+              )}
+              <Button size="sm" leftIcon={<Plus />} onClick={() => setForm(blank())}>
+                {t("brand.new")}
+              </Button>
+            </>
+          )
+        }
+      />
       {!rows.length ? (
         <AdminEmpty icon={<BadgeCheck />} />
       ) : (
@@ -65,7 +86,22 @@ export function BrandsManager({ rows: initial }: { rows: Row[] }) {
             start(async () => void (await reorderBrandsAction(next.map((b) => b.id))));
           }}
           render={(b, handle) => (
-            <div className={cn("group relative rounded-xl border border-ad-border bg-ad-panel p-4 transition hover:shadow-pop", !b.isActive && "opacity-60")}>
+            <div className={cn("group relative rounded-xl border bg-ad-panel p-4 transition hover:shadow-pop", selected.has(b.id) ? "border-ad-accent ring-2 ring-ad-accent/20" : "border-ad-border", !b.isActive && "opacity-60")}>
+              {editable && (
+                <SelectBox
+                  checked={selected.has(b.id)}
+                  onChange={() =>
+                    setSelected((s) => {
+                      const n = new Set(s);
+                      if (n.has(b.id)) n.delete(b.id);
+                      else n.add(b.id);
+                      return n;
+                    })
+                  }
+                  label={`${t("c.selectRow")}: ${b.label}`}
+                  className={cn("absolute start-3 top-3 z-10 size-4 accent-[var(--ad-accent)] transition", selected.size || selected.has(b.id) ? "opacity-100" : "opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100")}
+                />
+              )}
               <div className="absolute end-2 top-2 flex opacity-100 md:opacity-0 md:group-hover:opacity-100">{can("catalog.edit") && handle}</div>
               <button type="button" onClick={() => open(b)} className="block w-full text-start">
                 <div className="grid h-16 place-items-center">{b.logo ? <img src={b.logo.url} alt="" className="max-h-12 max-w-[80%] object-contain" /> : <span className="text-lg font-semibold">{b.label}</span>}</div>
@@ -80,6 +116,13 @@ export function BrandsManager({ rows: initial }: { rows: Row[] }) {
           )}
         />
       )}
+      <BulkActions
+        selected={selected}
+        onClear={() => setSelected(new Set())}
+        ops={visibilityOps(locale, can("catalog.delete"))}
+        run={bulkBrandsAction as (ids: string[], op: string) => ReturnType<typeof bulkBrandsAction>}
+        noun={locale === "ar" ? { one: "علامة تجارية", many: "علامات تجارية" } : { one: "brand", many: "brands" }}
+      />
       <EditSheet
         open={Boolean(form)}
         onOpenChange={(o) => !o && setForm(null)}

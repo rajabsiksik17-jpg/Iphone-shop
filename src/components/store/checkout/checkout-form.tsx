@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { ChevronDown, Lock, MapPin, Store, Truck, CreditCard, Banknote, Landmark, Check, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "@/i18n/navigation";
+import { legalLinkTags } from "@/components/store/legal-links";
 import { Button } from "@/components/ui/button";
 import { Field, Input, NativeSelect, Textarea, Checkbox } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
@@ -328,30 +329,26 @@ export function CheckoutForm({ initialTotals, user, addresses, payments, countri
               {(p) => <Textarea {...p} rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={t("checkout.notesPlaceholder")} maxLength={1000} />}
             </Field>
           )}
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 divide-y divide-border overflow-hidden rounded-2xl border border-border">
             {settings.requireTerms && (
-              <div>
+              <div className={cn("p-4 transition-colors", errors.acceptTerms && !terms ? "bg-red-50 dark:bg-red-500/10" : "bg-surface/60")}>
                 <Checkbox
                   checked={terms}
                   onChange={(e) => setTerms(e.target.checked)}
                   aria-invalid={Boolean(errors.acceptTerms) || undefined}
-                  label={t.rich("checkout.terms", {
-                    terms: () => (
-                      <Link href="/terms" target="_blank" className="underline">
-                        {t("checkout.termsLink")}
-                      </Link>
-                    ),
-                    privacy: () => (
-                      <Link href="/privacy" target="_blank" className="underline">
-                        {t("checkout.privacyLink")}
-                      </Link>
-                    ),
-                  })}
+                  aria-describedby={errors.acceptTerms ? "terms-error" : undefined}
+                  label={t.rich("checkout.terms", legalLinkTags({ newTab: true }))}
                 />
-                {errors.acceptTerms && <p className="ms-8 mt-1 text-xs font-medium text-red-600">{t("errors.required")}</p>}
+                {errors.acceptTerms && !terms && (
+                  <p id="terms-error" role="alert" className="ms-8 mt-1.5 text-xs font-medium text-red-600">
+                    {t("checkout.termsRequired")}
+                  </p>
+                )}
               </div>
             )}
-            <Checkbox label={t("checkout.marketing")} checked={marketing} onChange={(e) => setMarketing(e.target.checked)} />
+            <div className="p-4">
+              <Checkbox label={t("checkout.marketing")} checked={marketing} onChange={(e) => setMarketing(e.target.checked)} />
+            </div>
           </div>
         </SectionCard>
 

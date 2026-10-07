@@ -9,6 +9,7 @@ export type SettingsEntry = { title: AdminKey; section: AdminKey; href: string; 
 
 export const SETTINGS_INDEX: SettingsEntry[] = [
   { title: "s.store", section: "nav.settings", href: "/admin/settings/store", permission: "settings.general", keywords: ["store", "name", "logo", "address", "tax number", "order number", "prefix", "متجر", "شعار", "اسم"] },
+  { title: "s.storeType", section: "nav.settings", href: "/admin/settings/store-type", permission: "settings.general", keywords: ["store type", "preset", "fashion", "electronics", "beauty", "grocery", "attributes", "card", "icons", "نوع المتجر", "قالب", "أزياء", "إلكترونيات"] },
   { title: "s.appearance", section: "nav.settings", href: "/admin/settings/appearance", permission: "settings.general", keywords: ["theme", "color", "colour", "font", "radius", "header", "footer", "badge", "product card", "ثيم", "لون", "خط", "مظهر"] },
   { title: "s.localization", section: "nav.settings", href: "/admin/settings/localization", permission: "settings.general", keywords: ["language", "arabic", "english", "timezone", "locale", "لغة", "منطقة زمنية"] },
   { title: "s.currencies", section: "nav.settings", href: "/admin/settings/currencies", permission: "settings.general", keywords: ["currency", "jod", "usd", "eur", "exchange", "rate", "symbol", "عملة", "دينار"] },

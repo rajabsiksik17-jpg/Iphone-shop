@@ -8,7 +8,7 @@ export function timeAgo(date: string | Date, locale: string) {
   if (abs < 3600) return rtf.format(Math.round(diff / 60), "minute");
   if (abs < 86_400) return rtf.format(Math.round(diff / 3600), "hour");
   if (abs < 30 * 86_400) return rtf.format(Math.round(diff / 86_400), "day");
-  return d.toLocaleDateString(locale === "ar" ? "ar-JO" : "en-GB", { dateStyle: "medium" });
+  return d.toLocaleDateString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", { dateStyle: "medium" });
 }
 
 /** mm:ss or h:mm:ss elapsed since a date. */
@@ -21,5 +21,5 @@ export function elapsed(from: string | Date, now = Date.now()) {
 }
 
 export function fmtDate(d: string | Date, locale: string, withTime = false) {
-  return new Date(d).toLocaleString(locale === "ar" ? "ar-JO" : "en-GB", withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" });
+  return new Date(d).toLocaleString(locale === "ar" ? "ar-SA-u-ca-gregory-nu-latn" : "en-GB", withTime ? { dateStyle: "medium", timeStyle: "short" } : { dateStyle: "medium" });
 }

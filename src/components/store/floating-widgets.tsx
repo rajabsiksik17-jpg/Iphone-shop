@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { MessageCircle, Share2, X, MessagesSquare } from "lucide-react";
 import { SocialIcon, socialLabel } from "@/components/ui/social-icon";
 import { useStore } from "@/components/providers/store-context";
+import { usePathname } from "@/i18n/navigation";
 import { cn } from "@/lib/utils";
 import type { Settings } from "@/server/settings/schemas";
 
@@ -31,14 +32,40 @@ function useOutside(ref: React.RefObject<HTMLElement | null>, close: () => void,
   }, [ref, close, active]);
 }
 
+/** True while the page is being scrolled down (past the first screen); false on scroll up or when idle. */
+function useTuckOnScroll() {
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    let last = window.scrollY;
+    let idle: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      const y = window.scrollY;
+      if (Math.abs(y - last) > 6) setTucked(y > last && y > 120);
+      last = y;
+      clearTimeout(idle);
+      idle = setTimeout(() => setTucked(false), 900);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      clearTimeout(idle);
+    };
+  }, []);
+  return tucked;
+}
+
 /**
  * Two unobtrusive floating launchers on opposite edges: social links and
- * support (WhatsApp / live chat). On phones they sit above the tab bar and
- * shrink, and both hide while the cart drawer is open.
+ * support (WhatsApp / live chat). Social links are desktop-only (phones reach
+ * them from the footer and menu, and a second bubble would cover content);
+ * both hide while the cart drawer or chat is open.
  */
 export function FloatingWidgets({ widgets, social, whatsappMessage, chatAvailable }: Props) {
   const t = useTranslations("widgets");
   const { cartOpen, setChatOpen, chatOpen } = useStore();
+  const pathname = usePathname();
+  const onCheckout = pathname.startsWith("/checkout");
+  const tucked = useTuckOnScroll();
   const [socialOpen, setSocialOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState(false);
   const socialRef = useRef<HTMLDivElement>(null);
@@ -52,6 +79,9 @@ export function FloatingWidgets({ widgets, social, whatsappMessage, chatAvailabl
   const supportItems = [widgets.support.whatsapp && waHref ? "whatsapp" : null, widgets.support.liveChat && chatAvailable ? "chat" : null].filter(Boolean) as ("whatsapp" | "chat")[];
 
   if (cartOpen || chatOpen) return null;
+  // Phones: launchers sit above the tab bar (or checkout's order bar) and tuck away while the
+  // shopper scrolls down through content, so they never cover what's being read.
+  const bottom = onCheckout ? "bottom-[104px]" : "bottom-[88px]";
   const pos = (side: "start" | "end") => (side === "start" ? "start-4 md:start-6" : "end-4 md:end-6");
   const size = SIZES[widgets.social.size];
   const anim = widgets.social.animation === "float" ? "motion-safe:animate-[fade-up_0.6s_ease_both]" : "";
@@ -59,7 +89,7 @@ export function FloatingWidgets({ widgets, social, whatsappMessage, chatAvailabl
   return (
     <>
       {widgets.social.enabled && floatingSocial.length > 0 && (
-        <div ref={socialRef} className={cn("fixed bottom-[88px] z-30 flex flex-col items-center gap-2 md:bottom-6", pos(widgets.social.side), anim)}>
+        <div ref={socialRef} className={cn("fixed bottom-6 z-30 hidden flex-col items-center gap-2 md:flex", pos(widgets.social.side), anim)}>
           <div className={cn("flex flex-col-reverse items-center gap-2 transition-all duration-300", socialOpen ? "pointer-events-auto translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0")} aria-hidden={!socialOpen}>
             {floatingSocial.map((s, i) => (
               <a
@@ -89,7 +119,16 @@ export function FloatingWidgets({ widgets, social, whatsappMessage, chatAvailabl
       )}
 
       {widgets.support.enabled && supportItems.length > 0 && (
-        <div ref={supportRef} className={cn("fixed bottom-[88px] z-30 flex flex-col items-end gap-2 md:bottom-6", pos(widgets.support.side), widgets.support.side === "start" && "items-start")}>
+        <div
+          ref={supportRef}
+          className={cn(
+            "fixed z-30 flex flex-col items-end gap-2 transition-[transform,opacity] duration-300 md:bottom-6 md:translate-y-0 md:opacity-100",
+            bottom,
+            pos(widgets.support.side),
+            widgets.support.side === "start" && "items-start",
+            tucked && !supportOpen && "max-md:pointer-events-none max-md:translate-y-4 max-md:opacity-0",
+          )}
+        >
           {supportItems.length > 1 && (
             <div className={cn("flex flex-col gap-2 transition-all duration-300", supportOpen ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0")} aria-hidden={!supportOpen}>
               {supportItems.includes("chat") && (
