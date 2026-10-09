@@ -27,6 +27,7 @@ import { CURRENCY_CATALOG } from "../src/config/currencies";
 import { BANK_INSTRUCTIONS } from "../scripts/content-pairs";
 import { buildDefaultNavigation, NAV_VERSION } from "../src/server/setup/navigation";
 import { setupSaudiRegions } from "../src/server/setup/regions";
+import { setupPlatform } from "../src/server/setup/platform";
 import { brandLogo, categoryArt, productArt, slideArt, bannerArt, type DeviceKind } from "./seed/art";
 
 const L = (en: string, ar: string) => ({ en, ar });
@@ -450,6 +451,9 @@ async function content(catIds: Map<string, { id: string; path: string }>, brandI
   await db.shippingMethod.create({ data: { zoneId: world.id, name: L("International", "شحن دولي"), type: "WEIGHT", cost: SAR(119), perKg: SAR(25), minDays: 5, maxDays: 12 } });
 
   await setupSaudiRegions();
+  await setupPlatform();
+  // Everything the seed created is sample data: mark it so it's never confused with the merchant's own.
+  await db.$transaction([db.product.updateMany({ data: { source: "DEMO" } }), db.category.updateMany({ data: { source: "DEMO" } }), db.brand.updateMany({ data: { source: "DEMO" } })]);
 
   // Coupons & promotions
   await db.coupon.createMany({

@@ -1,5 +1,5 @@
 import "server-only";
-import { db, type Tx } from "../db";
+import { db, ANY_PROFILE, type Tx } from "../db";
 import { emit } from "../events";
 import { getSettings } from "../settings/service";
 import { refreshProductDerived } from "./derived";
@@ -23,8 +23,9 @@ export type StockChange = {
  * Uses a conditional UPDATE so concurrent checkouts can't oversell.
  */
 export async function applyStockChange(change: StockChange, tx: Tx) {
+  // Stock follows orders whatever store type is active (e.g. a cancelled order from another type restocks).
   const product = await tx.product.findUniqueOrThrow({
-    where: { id: change.productId },
+    where: { id: change.productId, ...ANY_PROFILE },
     select: { trackInventory: true, allowBackorder: true, lowStockThreshold: true },
   });
   if (!product.trackInventory) return null;
@@ -40,11 +41,11 @@ export async function applyStockChange(change: StockChange, tx: Tx) {
     balance = (await tx.productVariant.findUniqueOrThrow({ where: { id: change.variantId }, select: { stock: true } })).stock;
   } else {
     const res = await tx.product.updateMany({
-      where: { id: change.productId, ...(guard ? { stock: { gte: -change.delta } } : {}) },
+      where: { id: change.productId, ...ANY_PROFILE, ...(guard ? { stock: { gte: -change.delta } } : {}) },
       data: { stock: { increment: change.delta } },
     });
     if (res.count !== 1) throw new AppError("insufficient_stock", 409, { productId: change.productId });
-    balance = (await tx.product.findUniqueOrThrow({ where: { id: change.productId }, select: { stock: true } })).stock;
+    balance = (await tx.product.findUniqueOrThrow({ where: { id: change.productId, ...ANY_PROFILE }, select: { stock: true } })).stock;
   }
 
   await tx.inventoryMovement.create({
@@ -68,7 +69,7 @@ export async function afterStockChange(productId: string, variantId: string | nu
   emit("STOCK_CHANGED", { productId });
   if (balance === undefined) return;
   const threshold =
-    (await db.product.findUnique({ where: { id: productId }, select: { lowStockThreshold: true } }))?.lowStockThreshold ??
+    (await db.product.findUnique({ where: { id: productId, ...ANY_PROFILE }, select: { lowStockThreshold: true } }))?.lowStockThreshold ??
     (await getSettings("store")).lowStockThreshold;
   // Alert only on the crossing, not on every sale below the threshold.
   const crossedOut = balance <= 0 && (previous === undefined || previous > 0);

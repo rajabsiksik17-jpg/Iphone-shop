@@ -1,4 +1,5 @@
 import "server-only";
+import { visibleStaffWhere } from "../auth/protect";
 import { z } from "zod";
 import { db, Prisma } from "../db";
 import { Errors } from "../errors";
@@ -37,7 +38,7 @@ export async function chatInbox(staff: CurrentStaff) {
     db.conversation.findMany({ where: { status: "WAITING" }, orderBy: { createdAt: "asc" }, select, take: 100 }),
     db.conversation.findMany({ where: { status: { in: ["ASSIGNED", "ACTIVE"] } }, orderBy: { lastMessageAt: "desc" }, select, take: 200 }),
     db.conversation.findMany({ where: { status: { notIn: [...OPEN] } }, orderBy: { closedAt: "desc" }, select, take: 50 }),
-    db.user.findMany({ where: { type: "STAFF", status: "ACTIVE", OR: [{ role: { permissions: { hasSome: ["support.chat", "*"] } } }] }, select: { id: true, name: true, agentStatus: true }, orderBy: { name: "asc" } }),
+    db.user.findMany({ where: { type: "STAFF", status: "ACTIVE", OR: [{ role: { permissions: { hasSome: ["support.chat", "*"] } } }], ...visibleStaffWhere(staff.permissions) }, select: { id: true, name: true, agentStatus: true }, orderBy: { name: "asc" } }),
   ]);
   const dto = (c: (typeof waiting)[number]) => ({
     id: c.id,

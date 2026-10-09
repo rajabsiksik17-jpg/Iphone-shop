@@ -59,29 +59,29 @@ model User {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  sessions             Session[]
-  otpChallenges        OtpChallenge[]
-  resetTokens          PasswordResetToken[]
-  addresses            Address[]
-  orders               Order[]
-  cart                 Cart?
-  wishlist             WishlistItem[]
-  reviews              Review[]
-  pointsTransactions   PointsTransaction[]
-  notificationReads    NotificationRead[]
-  directNotifications  Notification[]
-  conversations        Conversation[]            @relation("ConversationCustomer")
-  assignedChats        Conversation[]            @relation("ConversationAgent")
-  chatParticipations   ConversationParticipant[]
-  recentlyViewed       RecentlyViewed[]
-  auditLogs            AuditLog[]
-  dataRequests         DataRequest[]
-  orderNotes           OrderNote[]
-  statusChanges        OrderStatusHistory[]
-  inventoryMovements   InventoryMovement[]
-  contactSubmissions   ContactSubmission[]
-  uploadedMedia        Media[]                   @relation("MediaUploader")
-  refunds              Refund[]
+  sessions            Session[]
+  otpChallenges       OtpChallenge[]
+  resetTokens         PasswordResetToken[]
+  addresses           Address[]
+  orders              Order[]
+  cart                Cart?
+  wishlist            WishlistItem[]
+  reviews             Review[]
+  pointsTransactions  PointsTransaction[]
+  notificationReads   NotificationRead[]
+  directNotifications Notification[]
+  conversations       Conversation[]            @relation("ConversationCustomer")
+  assignedChats       Conversation[]            @relation("ConversationAgent")
+  chatParticipations  ConversationParticipant[]
+  recentlyViewed      RecentlyViewed[]
+  auditLogs           AuditLog[]
+  dataRequests        DataRequest[]
+  orderNotes          OrderNote[]
+  statusChanges       OrderStatusHistory[]
+  inventoryMovements  InventoryMovement[]
+  contactSubmissions  ContactSubmission[]
+  uploadedMedia       Media[]                   @relation("MediaUploader")
+  refunds             Refund[]
 
   @@index([type, status])
   @@index([createdAt])
@@ -125,20 +125,20 @@ enum OtpPurpose {
 }
 
 model OtpChallenge {
-  id               String     @id @default(cuid())
-  userId           String
-  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  purpose          OtpPurpose
+  id            String     @id @default(cuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  purpose       OtpPurpose
   // HMAC of the code; the plain code only ever exists in the outgoing email.
-  codeHash         String
+  codeHash      String
   // HMAC of the opaque browser-bound challenge token (stored in a cookie).
-  challengeHash    String     @unique
-  attempts         Int        @default(0)
-  maxAttempts      Int
-  expiresAt        DateTime
-  consumedAt       DateTime?
-  ip               String?
-  createdAt        DateTime   @default(now())
+  challengeHash String     @unique
+  attempts      Int        @default(0)
+  maxAttempts   Int
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  ip            String?
+  createdAt     DateTime   @default(now())
 
   @@index([userId, createdAt])
 }
@@ -205,6 +205,8 @@ model Media {
   blurDataUrl  String?
   uploadedById String?
   uploadedBy   User?    @relation("MediaUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  // Shared demo asset key ("demo/bottle/b45309"): generated once, reused by every template.
+  templateRef  String?  @unique
   createdAt    DateTime @default(now())
 
   avatarOf        User[]           @relation("UserAvatar")
@@ -225,22 +227,31 @@ model Media {
 // ────────────────────────────────── Catalog ──────────────────────────────────
 
 model Brand {
-  id          String    @id @default(cuid())
-  slug        String    @unique
+  id          String       @id @default(cuid())
+  slug        String       @unique
   name        Json
-  description Json      @default("{}")
+  description Json         @default("{}")
   logoId      String?
-  logo        Media?    @relation("BrandLogo", fields: [logoId], references: [id], onDelete: SetNull)
+  logo        Media?       @relation("BrandLogo", fields: [logoId], references: [id], onDelete: SetNull)
   bannerId    String?
-  banner      Media?    @relation("BrandBanner", fields: [bannerId], references: [id], onDelete: SetNull)
+  banner      Media?       @relation("BrandBanner", fields: [bannerId], references: [id], onDelete: SetNull)
   website     String?
-  seo         Json      @default("{}")
-  isActive    Boolean   @default(true)
-  isFeatured  Boolean   @default(false)
-  position    Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  seo         Json         @default("{}")
+  isActive    Boolean      @default(true)
+  isFeatured  Boolean      @default(false)
+  position    Int          @default(0)
+  // Store-type profile this record belongs to (null = shared by every type).
+  profile     String?
+  // MERCHANT = created/owned by the store; DEMO = instantiated from a template.
+  source      RecordSource @default(MERCHANT)
+  // Stable id inside a store-type template ("perfumes/product/oud-royal"):
+  // makes template instantiation idempotent and lets updates find their rows.
+  templateRef String?      @unique
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
   products    Product[]
+
+  @@index([profile])
 }
 
 model Category {
@@ -273,8 +284,17 @@ model Category {
   products   ProductCategory[]
   attributes CategoryAttribute[]
 
+  // Store-type profile this record belongs to (null = shared by every type).
+  profile     String?
+  // MERCHANT = created/owned by the store; DEMO = instantiated from a template.
+  source      RecordSource @default(MERCHANT)
+  // Stable id inside a store-type template ("perfumes/product/oud-royal"):
+  // makes template instantiation idempotent and lets updates find their rows.
+  templateRef String?      @unique
+
   @@unique([parentId, slug])
   @@index([path])
+  @@index([profile])
 }
 
 model AttributeGroup {
@@ -439,12 +459,12 @@ model Product {
   widthMm          Int?
   heightMm         Int?
 
-  warranty   Json    @default("{}")
-  videoUrl   String?
-  isFeatured Boolean @default(false)
-  isNew      Boolean @default(false)
+  warranty     Json    @default("{}")
+  videoUrl     String?
+  isFeatured   Boolean @default(false)
+  isNew        Boolean @default(false)
   isBestSeller Boolean @default(false)
-  isLimited  Boolean @default(false)
+  isLimited    Boolean @default(false)
 
   ratingAvg   Float @default(0)
   ratingCount Int   @default(0)
@@ -453,12 +473,12 @@ model Product {
 
   // Lower-cased names (all locales), SKU, brand, categories and attribute
   // values — indexed with pg_trgm for fast fuzzy search.
-  searchText String @default("")
+  searchText     String @default("")
   // Normalized name / brand and phonetic keys for ranking (see lib/search-text).
   searchTitle    String @default("")
   searchBrand    String @default("")
   searchPhonetic String @default("")
-  seo        Json   @default("{}")
+  seo            Json   @default("{}")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -477,12 +497,21 @@ model Product {
   movements      InventoryMovement[]
   recentlyViewed RecentlyViewed[]
 
+  // Store-type profile this record belongs to (null = shared by every type).
+  profile     String?
+  // MERCHANT = created/owned by the store; DEMO = instantiated from a template.
+  source      RecordSource @default(MERCHANT)
+  // Stable id inside a store-type template ("perfumes/product/oud-royal"):
+  // makes template instantiation idempotent and lets updates find their rows.
+  templateRef String?      @unique
+
   @@index([status, visibility, publishedAt])
   @@index([brandId])
   @@index([effectivePrice])
   @@index([createdAt])
   @@index([salesCount])
   @@index([ratingAvg])
+  @@index([profile, status])
 }
 
 model ProductCategory {
@@ -549,30 +578,30 @@ model ProductAttributeValue {
 }
 
 model ProductVariant {
-  id             String          @id @default(cuid())
-  productId      String
-  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
-  sku            String?         @unique
-  barcode        String?
-  price          Int?
-  salePrice      Int?
-  saleStartsAt   DateTime?
-  saleEndsAt     DateTime?
-  costPrice      Int?
-  stock          Int             @default(0)
-  stockStatus    StockStatus     @default(IN_STOCK)
-  weightGrams    Int?
-  imageId        String?
-  image          Media?          @relation(fields: [imageId], references: [id], onDelete: SetNull)
-  isActive       Boolean         @default(true)
-  position       Int             @default(0)
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
-  options        VariantOption[]
-  cartItems      CartItem[]
-  orderItems     OrderItem[]
-  wishlistItems  WishlistItem[]
-  movements      InventoryMovement[]
+  id            String              @id @default(cuid())
+  productId     String
+  product       Product             @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku           String?             @unique
+  barcode       String?
+  price         Int?
+  salePrice     Int?
+  saleStartsAt  DateTime?
+  saleEndsAt    DateTime?
+  costPrice     Int?
+  stock         Int                 @default(0)
+  stockStatus   StockStatus         @default(IN_STOCK)
+  weightGrams   Int?
+  imageId       String?
+  image         Media?              @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  isActive      Boolean             @default(true)
+  position      Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  options       VariantOption[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+  wishlistItems WishlistItem[]
+  movements     InventoryMovement[]
 
   @@index([productId])
 }
@@ -696,17 +725,17 @@ model WishlistItem {
 // Order statuses are data, not an enum, so a store can add its own
 // (e.g. "ready_for_pickup") without a migration.
 model OrderStatus {
-  key            String   @id
+  key            String  @id
   label          Json
-  color          String   @default("#64748b")
-  position       Int      @default(0)
-  isSystem       Boolean  @default(false)
-  isFinal        Boolean  @default(false)
+  color          String  @default("#64748b")
+  position       Int     @default(0)
+  isSystem       Boolean @default(false)
+  isFinal        Boolean @default(false)
   // Stock is released back to inventory when an order enters this status.
-  restocks       Boolean  @default(false)
+  restocks       Boolean @default(false)
   // Revenue reporting counts orders in these statuses.
-  countsAsSale   Boolean  @default(true)
-  notifyCustomer Boolean  @default(false)
+  countsAsSale   Boolean @default(true)
+  notifyCustomer Boolean @default(false)
   emailTemplate  String?
   orders         Order[]
 }
@@ -722,22 +751,22 @@ enum PaymentStatus {
 }
 
 model Order {
-  id               String        @id @default(cuid())
-  number           String        @unique
-  userId           String?
-  user             User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
-  email            String
-  phone            String
-  customerName     String
-  statusKey        String
-  status           OrderStatus   @relation(fields: [statusKey], references: [key])
-  paymentStatus    PaymentStatus @default(UNPAID)
-  paymentMethod    String
-  currency         String
+  id              String        @id @default(cuid())
+  number          String        @unique
+  userId          String?
+  user            User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email           String
+  phone           String
+  customerName    String
+  statusKey       String
+  status          OrderStatus   @relation(fields: [statusKey], references: [key])
+  paymentStatus   PaymentStatus @default(UNPAID)
+  paymentMethod   String
+  currency        String
   // Shopper-selected display currency & rate at purchase time (informational).
-  displayCurrency  String?
-  displayRate      Float?
-  locale           String        @default("ar")
+  displayCurrency String?
+  displayRate     Float?
+  locale          String        @default("ar")
 
   subtotal       Int
   discountTotal  Int @default(0)
@@ -922,33 +951,33 @@ enum DiscountScope {
 }
 
 model Coupon {
-  id                    String        @id @default(cuid())
+  id                    String             @id @default(cuid())
   // null code = automatic promotion applied without a code
-  code                  String?       @unique
+  code                  String?            @unique
   name                  Json
-  description           Json          @default("{}")
+  description           Json               @default("{}")
   type                  DiscountType
   // PERCENT: basis points (1500 = 15%). FIXED: minor units.
   value                 Int
   maxDiscount           Int?
   minSubtotal           Int?
-  scope                 DiscountScope @default(ALL)
+  scope                 DiscountScope      @default(ALL)
   targetIds             String[]
-  excludeSaleItems      Boolean       @default(false)
-  firstOrderOnly        Boolean       @default(false)
+  excludeSaleItems      Boolean            @default(false)
+  firstOrderOnly        Boolean            @default(false)
   allowedEmails         String[]
   usageLimit            Int?
   usageLimitPerCustomer Int?
-  usedCount             Int           @default(0)
+  usedCount             Int                @default(0)
   startsAt              DateTime?
   endsAt                DateTime?
-  isActive              Boolean       @default(true)
-  isAutomatic           Boolean       @default(false)
+  isActive              Boolean            @default(true)
+  isAutomatic           Boolean            @default(false)
   // Targeting: empty = everywhere.
-  countries             String[]      @default([])
-  regionIds             String[]      @default([])
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  countries             String[]           @default([])
+  regionIds             String[]           @default([])
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
   redemptions           CouponRedemption[]
   orderDiscounts        OrderDiscount[]
 }
@@ -967,12 +996,12 @@ model CouponRedemption {
 }
 
 model NewsletterSubscriber {
-  id          String    @id @default(cuid())
-  email       String    @unique
-  locale      String    @default("ar")
-  status      String    @default("subscribed")
-  source      String?
-  createdAt   DateTime  @default(now())
+  id             String    @id @default(cuid())
+  email          String    @unique
+  locale         String    @default("ar")
+  status         String    @default("subscribed")
+  source         String?
+  createdAt      DateTime  @default(now())
   unsubscribedAt DateTime?
 }
 
@@ -1009,26 +1038,26 @@ enum ReviewStatus {
 }
 
 model Review {
-  id                 String        @id @default(cuid())
+  id                 String         @id @default(cuid())
   productId          String
-  product            Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product            Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   userId             String?
-  user               User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user               User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
   orderItemId        String?
-  orderItem          OrderItem?    @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  orderItem          OrderItem?     @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   authorName         String
   rating             Int
   title              String?
   body               String
-  status             ReviewStatus  @default(PENDING)
-  isVerifiedPurchase Boolean       @default(false)
-  locale             String        @default("ar")
-  helpfulCount       Int           @default(0)
-  reportCount        Int           @default(0)
+  status             ReviewStatus   @default(PENDING)
+  isVerifiedPurchase Boolean        @default(false)
+  locale             String         @default("ar")
+  helpfulCount       Int            @default(0)
+  reportCount        Int            @default(0)
   adminReply         String?
   repliedAt          DateTime?
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
   reports            ReviewReport[]
 
   @@unique([productId, userId])
@@ -1116,17 +1145,17 @@ enum DeliveryStatus {
 
 // Outbound message log for every external channel (email, WhatsApp, SMS…).
 model DeliveryLog {
-  id           String          @id @default(cuid())
-  channel      DeliveryChannel
-  recipient    String
-  subject      String?
-  template     String?
-  status       DeliveryStatus
-  error        String?
-  providerRef  String?
-  orderId      String?
-  userId       String?
-  createdAt    DateTime        @default(now())
+  id          String          @id @default(cuid())
+  channel     DeliveryChannel
+  recipient   String
+  subject     String?
+  template    String?
+  status      DeliveryStatus
+  error       String?
+  providerRef String?
+  orderId     String?
+  userId      String?
+  createdAt   DateTime        @default(now())
 
   @@index([channel, createdAt])
   @@index([status, createdAt])
@@ -1144,27 +1173,27 @@ enum ConversationStatus {
 }
 
 model Conversation {
-  id                String             @id @default(cuid())
-  customerId        String?
-  customer          User?              @relation("ConversationCustomer", fields: [customerId], references: [id], onDelete: SetNull)
-  guestName         String?
-  guestEmail        String?
-  guestTokenHash    String?            @unique
-  subject           String
-  status            ConversationStatus @default(WAITING)
-  assignedAgentId   String?
-  assignedAgent     User?              @relation("ConversationAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
-  locale            String             @default("ar")
-  pageUrl           String?
-  rating            Int?
-  createdAt         DateTime           @default(now())
-  acceptedAt        DateTime?
-  closedAt          DateTime?
-  lastMessageAt     DateTime           @default(now())
-  customerLastRead  DateTime?
-  agentLastRead     DateTime?
-  messages          ChatMessage[]
-  participants      ConversationParticipant[]
+  id               String                    @id @default(cuid())
+  customerId       String?
+  customer         User?                     @relation("ConversationCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+  guestName        String?
+  guestEmail       String?
+  guestTokenHash   String?                   @unique
+  subject          String
+  status           ConversationStatus        @default(WAITING)
+  assignedAgentId  String?
+  assignedAgent    User?                     @relation("ConversationAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  locale           String                    @default("ar")
+  pageUrl          String?
+  rating           Int?
+  createdAt        DateTime                  @default(now())
+  acceptedAt       DateTime?
+  closedAt         DateTime?
+  lastMessageAt    DateTime                  @default(now())
+  customerLastRead DateTime?
+  agentLastRead    DateTime?
+  messages         ChatMessage[]
+  participants     ConversationParticipant[]
 
   @@index([status, createdAt])
   @@index([customerId])
@@ -1225,28 +1254,34 @@ model Page {
 }
 
 model PageSection {
-  id        String   @id @default(cuid())
-  pageId    String
-  page      Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
-  type      String
-  position  Int      @default(0)
-  isVisible Boolean  @default(true)
-  data      Json     @default("{}")
-  style     Json     @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  pageId      String
+  page        Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  type        String
+  position    Int      @default(0)
+  isVisible   Boolean  @default(true)
+  data        Json     @default("{}")
+  style       Json     @default("{}")
+  // Homepage sections belong to a store-type profile; other pages' are shared (null).
+  profile     String?
+  templateRef String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([pageId, position])
+  @@index([profile])
 }
 
 model Slider {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  name      String
-  settings  Json     @default("{}")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  slides    Slide[]
+  id          String   @id @default(cuid())
+  key         String   @unique
+  name        String
+  settings    Json     @default("{}")
+  profile     String?
+  templateRef String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  slides      Slide[]
 }
 
 model Slide {
@@ -1465,22 +1500,22 @@ enum ShippingRateType {
 }
 
 model ShippingMethod {
-  id          String           @id @default(cuid())
-  zoneId      String
-  zone        ShippingZone     @relation(fields: [zoneId], references: [id], onDelete: Cascade)
-  name        Json
-  description Json             @default("{}")
-  type        ShippingRateType
-  cost        Int              @default(0)
-  freeOver    Int?
-  perKg       Int?
-  minDays     Int?
-  maxDays     Int?
-  isActive    Boolean          @default(true)
-  position    Int              @default(0)
+  id             String               @id @default(cuid())
+  zoneId         String
+  zone           ShippingZone         @relation(fields: [zoneId], references: [id], onDelete: Cascade)
+  name           Json
+  description    Json                 @default("{}")
+  type           ShippingRateType
+  cost           Int                  @default(0)
+  freeOver       Int?
+  perKg          Int?
+  minDays        Int?
+  maxDays        Int?
+  isActive       Boolean              @default(true)
+  position       Int                  @default(0)
   // Only offered in cities with an enabled per-city rate (e.g. express in main cities).
-  limitToRegions Boolean       @default(false)
-  regionRates ShippingRegionRate[]
+  limitToRegions Boolean              @default(false)
+  regionRates    ShippingRegionRate[]
 }
 
 /// A city / governorate the store delivers to, optionally grouped (e.g. Saudi administrative regions).
@@ -1605,4 +1640,35 @@ model CustomIcon {
   name      String
   svg       String
   createdAt DateTime @default(now())
+}
+
+enum RecordSource {
+  MERCHANT
+  DEMO
+  IMPORTED
+}
+
+/**
+ * A store-type profile: everything type-specific the store has built for one
+ * store type. Switching type changes only which profile is active — catalog,
+ * homepage and presentation of the other profiles stay untouched in place.
+ */
+model StoreProfile {
+  key             String    @id
+  isCustom        Boolean   @default(false)
+  // Custom types: name/description/icon and a template definition with the
+  // same shape as the built-in ones. Built-in types read these from code.
+  name            Json      @default("{}")
+  description     Json      @default("{}")
+  icon            String?
+  definition      Json      @default("{}")
+  // This profile's presentation (card specs, trust icons, product card,
+  // terminology) — saved when leaving the type and restored when returning.
+  overrides       Json      @default("{}")
+  // Template version the profile was initialised from (see config/store-templates).
+  templateVersion Int       @default(0)
+  initializedAt   DateTime?
+  activatedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { getSettings, saveSettings } from "@/server/settings/service";
-import { settingsSchemas, SETTINGS_PERMISSIONS, SECRET_FIELDS, type SettingsGroup } from "@/server/settings/schemas";
+import { settingsSchemas, SETTINGS_PERMISSIONS, SECRET_FIELDS, type SettingsGroup, PINNED_FIELDS } from "@/server/settings/schemas";
 import { testSmtp, testImap, sendMail } from "@/server/email/mailer";
 import { emailLayout, escapeHtml } from "@/server/email/render";
 import { audit } from "@/server/audit";
@@ -10,6 +10,8 @@ import { t } from "@/lib/i18n-text";
 import * as data from "@/server/admin/settings-data";
 import * as storeType from "@/server/admin/store-type";
 import * as regions from "@/server/admin/regions";
+import * as profiles from "@/server/admin/store-profiles";
+import * as country from "@/server/admin/country";
 import { adminRun } from "./_base";
 
 const groupSchema = z.enum(Object.keys(settingsSchemas) as [SettingsGroup, ...SettingsGroup[]]);
@@ -23,6 +25,12 @@ export async function saveSettingsAction(group: SettingsGroup, input: unknown, c
   return adminRun(SETTINGS_PERMISSIONS[g], async (staff) => {
     const allowedClear = z.array(z.enum((SECRET_FIELDS[g] ?? ["__none__"]) as [string, ...string[]])).max(10).parse(clearSecrets);
     let value = input;
+    // Platform-owned fields keep their stored value whatever the form sends.
+    const pinned = PINNED_FIELDS[g];
+    if (pinned && input && typeof input === "object") {
+      const current = (await getSettings(g)) as Record<string, unknown>;
+      value = { ...(input as object), ...Object.fromEntries(pinned.map((k) => [k, current[k]])) };
+    }
     // Connection status is written only by the test actions, never by the form.
     if (g === "email" && input && typeof input === "object") {
       const current = await getSettings("email");
@@ -106,16 +114,8 @@ export async function refreshRatesAction() {
   return adminRun("settings.general", (s) => data.refreshRatesNow(s));
 }
 
-export async function planStoreTypeAction(key: string, locale: string) {
-  return adminRun("settings.general", () => storeType.planPreset(z.string().max(40).parse(key), z.enum(["ar", "en"]).parse(locale)), { revalidate: false });
-}
-
-export async function applyStoreTypeAction(key: string, options: unknown) {
-  return adminRun(["settings.general", "catalog.edit"], (s) => storeType.applyPreset(z.string().max(40).parse(key), options, s));
-}
-
 export async function saveStoreTypeAction(input: unknown) {
-  return adminRun("settings.general", (s) => storeType.saveStoreType(input, s));
+  return adminRun("platform.storeType", (s) => storeType.saveStoreType(input, s));
 }
 
 export async function setCardAttributesAction(ids: string[]) {
@@ -128,7 +128,7 @@ export async function countryRegionsAction(country: string, locale: string) {
   return adminRun("settings.shipping", () => regions.countryRegions(country, z.enum(["ar", "en"]).parse(locale)), { revalidate: false });
 }
 
-export async function saveCountriesAction(input: { countries: string[]; defaultCountry: string }) {
+export async function saveCountriesAction(input: { countries: string[] }) {
   return adminRun("settings.shipping", (s) => regions.saveCountries(input, s));
 }
 
@@ -154,4 +154,44 @@ export async function saveRegionRatesAction(regionIds: string[], rates: unknown)
 
 export async function setMethodLimitAction(methodId: string, limit: boolean) {
   return adminRun("settings.shipping", (s) => regions.setMethodLimit(methodId, limit, s));
+}
+
+// ─────────────── Platform (super-admin only) ───────────────
+// "platform.*" permissions are held only by the wildcard super-admin role and
+// can't be granted to any other role (see config/permissions).
+
+export async function planSwitchStoreTypeAction(key: string, locale: string) {
+  return adminRun("platform.storeType", () => profiles.planSwitch(z.string().max(60).parse(key), z.enum(["ar", "en"]).parse(locale)), { revalidate: false });
+}
+
+export async function switchStoreTypeAction(key: string) {
+  return adminRun("platform.storeType", (s) => profiles.switchStoreType(z.string().max(60).parse(key), s));
+}
+
+export async function applyTemplateUpdateAction(key: string) {
+  return adminRun("platform.storeType", (s) => profiles.applyTemplateUpdate(z.string().max(60).parse(key), s));
+}
+
+export async function removeDemoProductsAction(key: string) {
+  return adminRun("platform.storeType", (s) => profiles.removeDemoProducts(z.string().max(60).parse(key), s));
+}
+
+export async function customTypeAction(key: string) {
+  return adminRun("platform.storeType", () => profiles.customTypeData(z.string().max(60).parse(key)), { revalidate: false });
+}
+
+export async function saveCustomTypeAction(key: string | null, input: unknown) {
+  return adminRun("platform.storeType", (s) => profiles.saveCustomType(key === null ? null : z.string().max(60).parse(key), input, s));
+}
+
+export async function planCountryChangeAction(code: string) {
+  return adminRun("platform.country", () => country.planCountryChange(code), { revalidate: false });
+}
+
+export async function applyCountryChangeAction(input: unknown) {
+  return adminRun("platform.country", (s) => country.applyCountryChange(input, s));
+}
+
+export async function setDetectionAction(on: boolean) {
+  return adminRun("platform.country", (s) => country.setDetection(on, s));
 }

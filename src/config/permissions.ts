@@ -39,26 +39,44 @@ export const PERMISSIONS = {
   "audit.view": "View audit & system logs",
 } as const;
 
-export type Permission = keyof typeof PERMISSIONS;
-export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
+/**
+ * Platform-level authority. These are deliberately NOT in PERMISSIONS: they
+ * can't be ticked on any role, so only the super-admin (wildcard) holds them.
+ * A store manager with every store permission still can't change the store
+ * type or the primary country, or touch super-admin accounts.
+ */
+export const PLATFORM_PERMISSIONS = {
+  "platform.storeType": "Change the store type and manage store-type templates",
+  "platform.country": "Set the primary store country and location detection",
+  "platform.admins": "See and manage super-admin accounts",
+} as const;
+
+export type GrantablePermission = keyof typeof PERMISSIONS;
+export type Permission = GrantablePermission | keyof typeof PLATFORM_PERMISSIONS;
+/** Permissions a role can be given (platform permissions excluded on purpose). */
+export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as GrantablePermission[];
 
 /** Wildcard granted to the super-admin role. */
 export const WILDCARD = "*";
+
+/** Super-admin = holds the wildcard (only the locked super_admin role does). */
+export const isSuperAdmin = (granted: readonly string[] | null | undefined) => Boolean(granted?.includes(WILDCARD));
 
 export function hasPermission(granted: readonly string[] | null | undefined, needed: Permission | Permission[]): boolean {
   if (!granted) return false;
   if (granted.includes(WILDCARD)) return true;
   const list = Array.isArray(needed) ? needed : [needed];
-  return list.every((p) => granted.includes(p));
+  // Platform permissions are wildcard-only, even if a forged role lists them.
+  return list.every((p) => !p.startsWith("platform.") && granted.includes(p));
 }
 
 export function hasAnyPermission(granted: readonly string[] | null | undefined, needed: Permission[]): boolean {
   if (!granted) return false;
   if (granted.includes(WILDCARD)) return true;
-  return needed.some((p) => granted.includes(p));
+  return needed.some((p) => !p.startsWith("platform.") && granted.includes(p));
 }
 
-export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
+export const PERMISSION_GROUPS: { key: string; permissions: GrantablePermission[] }[] = [
   { key: "overview", permissions: ["dashboard.view", "analytics.view"] },
   { key: "catalog", permissions: ["catalog.view", "catalog.edit", "catalog.delete", "inventory.manage", "reviews.moderate"] },
   { key: "orders", permissions: ["orders.view", "orders.manage", "orders.refund"] },
@@ -80,6 +98,15 @@ export const PERMISSION_GROUPS: { key: string; permissions: Permission[] }[] = [
   { key: "system", permissions: ["staff.manage", "audit.view"] },
 ];
 
+/** Store manager: everything store-level except security policy (OTP/sessions). */
+export const MANAGER_PERMISSIONS: GrantablePermission[] = ALL_PERMISSIONS.filter((p) => p !== "settings.security");
+/** The store-manager permissions shipped before v2 — used to upgrade untouched roles. */
+export const LEGACY_MANAGER_PERMISSIONS = [
+  "dashboard.view", "analytics.view", "catalog.view", "catalog.edit", "inventory.manage", "reviews.moderate",
+  "orders.view", "orders.manage", "customers.view", "customers.pii", "marketing.manage", "content.manage",
+  "support.chat", "support.messages", "settings.shipping",
+];
+
 /** Seeded system roles. Editable afterwards except super_admin. */
 export const SYSTEM_ROLES: { key: string; name: { en: string; ar: string }; permissions: string[] }[] = [
   { key: "super_admin", name: { en: "Super Admin", ar: "المدير العام" }, permissions: [WILDCARD] },
@@ -91,11 +118,9 @@ export const SYSTEM_ROLES: { key: string; name: { en: string; ar: string }; perm
   {
     key: "manager",
     name: { en: "Store Manager", ar: "مدير المتجر" },
-    permissions: [
-      "dashboard.view", "analytics.view", "catalog.view", "catalog.edit", "inventory.manage", "reviews.moderate",
-      "orders.view", "orders.manage", "customers.view", "customers.pii", "marketing.manage", "content.manage",
-      "support.chat", "support.messages", "settings.shipping",
-    ],
+    // Full day-to-day control of the store; platform settings (store type,
+    // primary country) and super-admin accounts stay out of reach.
+    permissions: MANAGER_PERMISSIONS,
   },
   {
     key: "content_manager",

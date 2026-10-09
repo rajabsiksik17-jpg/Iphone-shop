@@ -1,4 +1,5 @@
 import "server-only";
+import { isSuperAdminUser, superAdminUserWhere } from "../auth/protect";
 import { cookies } from "next/headers";
 import { db } from "../db";
 import { emit } from "../events";
@@ -128,7 +129,8 @@ export async function startConversation(input: { subject: string; message: strin
 async function autoAssign(conversationId: string) {
   const online = await onlineAgentIds();
   const agents = await db.user.findMany({
-    where: { id: { in: online }, role: { OR: [{ permissions: { has: "support.chat" } }, { permissions: { has: "*" } }] } },
+    // Super-admins aren't store staff: they can pick chats up, but aren't auto-assigned.
+    where: { id: { in: online }, role: { permissions: { has: "support.chat" } }, NOT: superAdminUserWhere },
     include: { _count: { select: { assignedChats: { where: { status: { in: ["ASSIGNED", "ACTIVE"] } } } } } },
   });
   if (!agents.length) return;
@@ -233,7 +235,7 @@ export async function closeConversationAsAgent(conversationId: string, agent: { 
 
 export async function transferConversation(conversationId: string, toAgentId: string, by: { id: string; name: string }) {
   const target = await db.user.findFirst({ where: { id: toAgentId, type: "STAFF", status: "ACTIVE" } });
-  if (!target) throw Errors.notFound("agent");
+  if (!target || ((await isSuperAdminUser(target.id)) && !(await isSuperAdminUser(by.id)))) throw Errors.notFound("agent");
   await db.conversation.update({ where: { id: conversationId }, data: { assignedAgentId: target.id, status: "ASSIGNED" } });
   await db.conversationParticipant.upsert({
     where: { conversationId_userId: { conversationId, userId: target.id } },

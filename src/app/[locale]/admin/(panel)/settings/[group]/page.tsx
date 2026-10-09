@@ -8,7 +8,7 @@ import { Forbidden } from "@/components/admin/ui";
 export const metadata = { title: "Settings" };
 
 // Groups with a declarative form (see components/admin/settings/definitions).
-const GENERIC = ["store", "appearance", "localization", "seo", "checkout", "tax", "security", "chat", "contact", "loyalty", "privacy", "maintenance", "geo"] as const;
+const GENERIC = ["store", "appearance", "localization", "seo", "checkout", "tax", "security", "chat", "contact", "loyalty", "privacy", "maintenance"] as const;
 
 export default async function SettingsGroupPage({ params }: { params: Promise<{ group: string }> }) {
   const { group } = await params;

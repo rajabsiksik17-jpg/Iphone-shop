@@ -460,7 +460,20 @@ export const SETTINGS_PERMISSIONS: Record<SettingsGroup, import("@/config/permis
   ticker: "content.manage",
   maintenance: "settings.general",
   privacy: "settings.general",
-  geo: "settings.general",
+  // Platform-level (super-admin only): the primary country and the store type.
+  geo: "platform.country",
   fx: "settings.general",
-  storeType: "settings.general",
+  storeType: "platform.storeType",
+};
+
+/**
+ * Fields the generic settings form must never change: they're owned by a
+ * dedicated platform workflow (e.g. the primary country review), so a forged
+ * form submission can't slip them through a store-level settings group.
+ */
+export const PINNED_FIELDS: Partial<Record<SettingsGroup, string[]>> = {
+  store: ["defaultCountry"],
+  geo: ["defaultCountry"],
+  // The active type changes only through the switch workflow (profile save/restore).
+  storeType: ["type", "appliedPresets"],
 };

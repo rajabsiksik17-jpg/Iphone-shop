@@ -22,7 +22,9 @@
     "dev:app": "tsx watch --clear-screen=false --ignore ./src --ignore ./.next server.ts",
     "migrate:saudi": "node --conditions=react-server --import tsx scripts/migrate-to-saudi.ts",
     "search:reindex": "node --conditions=react-server --import tsx scripts/reindex-search.ts",
-    "upgrade:content": "node --conditions=react-server --import tsx scripts/upgrade-content.ts"
+    "upgrade:content": "node --conditions=react-server --import tsx scripts/upgrade-content.ts",
+    "report:storage": "node --conditions=react-server --import tsx scripts/storage-report.ts",
+    "check:platform": "node --conditions=react-server --import tsx scripts/check-platform.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

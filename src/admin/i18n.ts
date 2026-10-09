@@ -768,6 +768,8 @@ const d = {
   "s.privacy": ["Privacy & cookies", "الخصوصية وملفات الارتباط"],
   "s.maintenance": ["Maintenance mode", "وضع الصيانة"],
   "s.geo": ["Location detection", "تحديد الموقع"],
+  "s.country": ["Primary store country", "الدولة الأساسية للمتجر"],
+  "s.platform": ["Platform", "المنصة"],
   "s.testSmtp": ["Test SMTP connection", "اختبار اتصال SMTP"],
   "s.testImap": ["Test IMAP connection", "اختبار اتصال IMAP"],
   "s.sendTest": ["Send test email", "إرسال بريد تجريبي"],

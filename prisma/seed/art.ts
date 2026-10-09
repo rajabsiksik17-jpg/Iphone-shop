@@ -20,7 +20,7 @@ export type DeviceKind =
   | "case"
   | "powerbank";
 
-function shade(hex: string, amt: number) {
+export function shade(hex: string, amt: number) {
   const n = parseInt(hex.slice(1), 16);
   const clamp = (v: number) => Math.max(0, Math.min(255, v));
   const r = clamp((n >> 16) + amt);
@@ -34,7 +34,7 @@ const isLight = (hex: string) => {
   return ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 > 170;
 };
 
-function frame(inner: string, opts: { bg?: [string, string]; shadow?: boolean } = {}) {
+export function frame(inner: string, opts: { bg?: [string, string]; shadow?: boolean } = {}) {
   const [a, b] = opts.bg ?? ["#f7f7f8", "#e9eaee"];
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200">
 <defs>
@@ -69,7 +69,7 @@ function phoneFront(color: string, screen = "url(#screen)") {
     .join("")}</g><rect x="466" y="226" width="288" height="648" rx="48" fill="url(#gloss)" opacity=".35"/></g>`;
 }
 
-const devices: Record<DeviceKind, (color: string, view: number) => string> = {
+export const devices: Record<DeviceKind, (color: string, view: number) => string> = {
   phone: (c, v) => (v % 2 === 0 ? phoneBack(c, false) : phoneFront(c)),
   "phone-pro": (c, v) => (v % 2 === 0 ? phoneBack(c, true) : phoneFront(c, "url(#screen2)")),
   fold: (c, v) =>

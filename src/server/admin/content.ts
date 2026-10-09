@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { db, Prisma } from "../db";
+import { db, inProfile, Prisma } from "../db";
 import { Errors } from "../errors";
 import { audit } from "../audit";
 import { localized, t } from "@/lib/i18n-text";
@@ -31,7 +31,7 @@ export async function pageList(locale: string) {
 
 /** Everything the page builder needs, including names for referenced records. */
 export async function pageEditorData(slug: string, locale: string) {
-  const page = slug === "new" ? null : await db.page.findUnique({ where: { slug }, include: { sections: { orderBy: { position: "asc" } } } });
+  const page = slug === "new" ? null : await db.page.findUnique({ where: { slug }, include: { sections: { where: await inProfile(), orderBy: { position: "asc" } } } });
   if (slug !== "new" && !page) return null;
   const productIds = new Set<string>();
   for (const s of page?.sections ?? []) {
@@ -129,7 +129,8 @@ export async function savePage(id: string | null, raw: unknown, staff: CurrentSt
     const keep = sections.filter((s) => s.id).map((s) => s.id!);
     await tx.pageSection.deleteMany({ where: { pageId: pg.id, id: { notIn: keep } } });
     for (const s of sections) {
-      const row = { type: s.type, isVisible: s.isVisible, data: s.data, style: s.style, position: s.position };
+      // Homepage sections belong to the active store type (filled in by the db scope); other pages' are shared.
+      const row = { type: s.type, isVisible: s.isVisible, data: s.data, style: s.style, position: s.position, ...(pg.slug === "home" ? {} : { profile: null }) };
       if (s.id && (await tx.pageSection.findFirst({ where: { id: s.id, pageId: pg.id }, select: { id: true } }))) await tx.pageSection.update({ where: { id: s.id }, data: row });
       else await tx.pageSection.create({ data: { ...row, pageId: pg.id } });
     }
@@ -148,7 +149,7 @@ export async function deletePage(id: string, staff: CurrentStaff) {
 }
 
 export async function duplicatePage(id: string, staff: CurrentStaff) {
-  const page = await db.page.findUnique({ where: { id }, include: { sections: true } });
+  const page = await db.page.findUnique({ where: { id }, include: { sections: { where: await inProfile() } } });
   if (!page) throw Errors.notFound("page");
   let slug = `${page.slug}-copy`;
   for (let n = 2; await db.page.findUnique({ where: { slug } }); n++) slug = `${page.slug}-copy-${n}`;

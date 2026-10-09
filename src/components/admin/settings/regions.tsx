@@ -154,17 +154,17 @@ export function RegionsView({ overview, initial }: { overview: Overview; initial
 
   // ── Shipping countries ──
   const [countries, setCountries] = useState(overview.shipping.map((c) => c.code));
-  const [defaultCountry, setDefaultCountry] = useState(overview.defaultCountry);
   const [savingCountries, startCountries] = useTransition();
-  const countriesDirty = countries.join() !== overview.shipping.map((c) => c.code).join() || defaultCountry !== overview.defaultCountry;
+  const countriesDirty = countries.join() !== overview.shipping.map((c) => c.code).join();
   const nameOf = (code: string) => overview.allCountries.find((c) => c.code === code)?.name ?? code;
-  const defaultOptions = useCountryOptions(useMemo(() => (countries.length ? countries.map((code) => ({ code, name: nameOf(code) })) : overview.allCountries), [countries, overview.allCountries])); // eslint-disable-line react-hooks/exhaustive-deps
+  // The primary country is the platform default (super-admin) — it always stays shippable.
+  const primary = overview.defaultCountry;
   const saveCountries = () =>
     startCountries(async () => {
-      const def = countries.length && !countries.includes(defaultCountry) ? countries[0] : defaultCountry;
-      const r = await saveCountriesAction({ countries, defaultCountry: def });
+      const list = countries.length && !countries.includes(primary) ? [primary, ...countries] : countries;
+      const r = await saveCountriesAction({ countries: list });
       if (r.ok) {
-        setDefaultCountry(def);
+        setCountries(list);
         toast.success(t("c.saved"));
         router.refresh();
       } else toast.error(t("c.fixErrors"));
@@ -286,7 +286,7 @@ export function RegionsView({ overview, initial }: { overview: Overview; initial
           actions={
             countriesDirty && (
               <div className="flex gap-2">
-                <Button size="sm" variant="ghost" onClick={() => (setCountries(overview.shipping.map((c) => c.code)), setDefaultCountry(overview.defaultCountry))}>
+                <Button size="sm" variant="ghost" onClick={() => setCountries(overview.shipping.map((c) => c.code))}>
                   {t("c.cancel")}
                 </Button>
                 <Button size="sm" onClick={saveCountries} loading={savingCountries}>
@@ -299,11 +299,14 @@ export function RegionsView({ overview, initial }: { overview: Overview; initial
           <div className="grid gap-4 md:grid-cols-[1fr_16rem]">
             <div>
               <Label>{ar ? "الدول" : "Countries"}</Label>
-              <CountryChips value={countries} onChange={setCountries} all={overview.allCountries} label={ar ? "أضف دولة…" : "Add a country…"} />
+              <CountryChips value={countries} onChange={(v) => setCountries(v.length && !v.includes(primary) ? [primary, ...v] : v)} all={overview.allCountries} label={ar ? "أضف دولة…" : "Add a country…"} />
             </div>
             <div>
-              <Label hint={ar ? "تُختار مسبقًا في صفحة الدفع" : "Preselected at checkout"}>{ar ? "الدولة الافتراضية" : "Default country"}</Label>
-              <Combobox label={ar ? "الدولة الافتراضية" : "Default country"} options={defaultOptions} value={defaultCountry} onChange={setDefaultCountry} searchable className={field} />
+              <Label hint={ar ? "يحددها مدير النظام" : "Set by the system administrator"}>{ar ? "الدولة الأساسية" : "Primary country"}</Label>
+              <div className="flex h-10 items-center gap-2 rounded-lg border border-ad-border bg-ad-sunken px-3 text-sm">
+                <CountryFlag code={primary} />
+                {nameOf(primary)}
+              </div>
             </div>
           </div>
           {overview.shipping.length > 0 && (
@@ -315,7 +318,7 @@ export function RegionsView({ overview, initial }: { overview: Overview; initial
                     <span className="block truncate text-sm font-medium">{c.name}</span>
                     <span className="block text-xs text-ad-muted">{c.cities ? (ar ? `${c.activeCities} من ${c.cities} مدينة مفعّلة` : `${c.activeCities} of ${c.cities} cities active`) : ar ? "بدون قائمة مدن (إدخال حر)" : "No city list (free text)"}</span>
                   </span>
-                  {c.code === overview.defaultCountry && <Pill tone="green">{ar ? "افتراضي" : "Default"}</Pill>}
+                  {c.code === primary && <Pill tone="green">{ar ? "أساسية" : "Primary"}</Pill>}
                 </button>
               ))}
             </div>

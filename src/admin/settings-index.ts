@@ -9,7 +9,7 @@ export type SettingsEntry = { title: AdminKey; section: AdminKey; href: string; 
 
 export const SETTINGS_INDEX: SettingsEntry[] = [
   { title: "s.store", section: "nav.settings", href: "/admin/settings/store", permission: "settings.general", keywords: ["store", "name", "logo", "address", "tax number", "order number", "prefix", "متجر", "شعار", "اسم"] },
-  { title: "s.storeType", section: "nav.settings", href: "/admin/settings/store-type", permission: "settings.general", keywords: ["store type", "preset", "fashion", "electronics", "beauty", "grocery", "attributes", "card", "icons", "نوع المتجر", "قالب", "أزياء", "إلكترونيات"] },
+  { title: "s.storeType", section: "nav.settings", href: "/admin/settings/store-type", permission: "platform.storeType", keywords: ["store type", "preset", "fashion", "electronics", "beauty", "grocery", "attributes", "card", "icons", "نوع المتجر", "قالب", "أزياء", "إلكترونيات"] },
   { title: "s.appearance", section: "nav.settings", href: "/admin/settings/appearance", permission: "settings.general", keywords: ["theme", "color", "colour", "font", "radius", "header", "footer", "badge", "product card", "ثيم", "لون", "خط", "مظهر"] },
   { title: "s.localization", section: "nav.settings", href: "/admin/settings/localization", permission: "settings.general", keywords: ["language", "arabic", "english", "timezone", "locale", "لغة", "منطقة زمنية"] },
   { title: "s.currencies", section: "nav.settings", href: "/admin/settings/currencies", permission: "settings.general", keywords: ["currency", "jod", "usd", "eur", "exchange", "rate", "symbol", "عملة", "دينار"] },
@@ -30,7 +30,7 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
   { title: "s.orderStatuses", section: "nav.settings", href: "/admin/settings/order-statuses", permission: "settings.general", keywords: ["status", "order status", "workflow", "حالة"] },
   { title: "s.privacy", section: "nav.settings", href: "/admin/settings/privacy", permission: "settings.general", keywords: ["privacy", "cookie", "consent", "gdpr", "export", "delete account", "خصوصية"] },
   { title: "s.maintenance", section: "nav.settings", href: "/admin/settings/maintenance", permission: "settings.general", keywords: ["maintenance", "offline", "coming soon", "صيانة"] },
-  { title: "s.geo", section: "nav.settings", href: "/admin/settings/geo", permission: "settings.general", keywords: ["country", "geo", "detect", "location", "دولة"] },
+  { title: "s.country", section: "nav.settings", href: "/admin/settings/country", permission: "platform.country", keywords: ["primary country", "country", "geo", "detect", "location", "currency", "tax", "timezone", "الدولة الأساسية", "دولة", "عملة", "منطقة زمنية"] },
   { title: "nav.integrations", section: "nav.settings", href: "/admin/integrations", permission: "settings.integrations", keywords: ["google analytics", "search console", "meta pixel", "tiktok", "whatsapp api", "integration", "تكامل"] },
   { title: "cms.tickerSettings", section: "nav.content", href: "/admin/announcements", permission: "content.manage", keywords: ["ticker", "announcement", "news", "marquee", "شريط", "إعلان"] },
   { title: "cms.floatingWidgets", section: "nav.content", href: "/admin/social", permission: "content.manage", keywords: ["floating", "social", "button", "زر عائم"] },

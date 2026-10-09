@@ -91,6 +91,70 @@ export const REGION_PRESETS: Record<string, RegionPreset[]> = {
       ["South Al Batinah", "جنوب الباطنة"], ["North Ash Sharqiyah", "شمال الشرقية"], ["South Ash Sharqiyah", "جنوب الشرقية"], ["Ad Dhahirah", "الظاهرة"], ["Al Wusta", "الوسطى"],
     ]),
   ],
+  JO: [
+    g("Governorates", "المحافظات", [
+      ["Amman", "عمّان"], ["Irbid", "إربد"], ["Zarqa", "الزرقاء"], ["Balqa (Salt)", "البلقاء (السلط)"], ["Madaba", "مادبا"], ["Mafraq", "المفرق"],
+      ["Jerash", "جرش"], ["Ajloun", "عجلون"], ["Karak", "الكرك"], ["Tafilah", "الطفيلة"], ["Ma'an", "معان"], ["Aqaba", "العقبة"],
+    ]),
+  ],
+  EG: [
+    g("Governorates", "المحافظات", [
+      ["Cairo", "القاهرة"], ["Giza", "الجيزة"], ["Alexandria", "الإسكندرية"], ["Qalyubia", "القليوبية"], ["Sharqia", "الشرقية"], ["Dakahlia", "الدقهلية"],
+      ["Gharbia", "الغربية"], ["Monufia", "المنوفية"], ["Beheira", "البحيرة"], ["Kafr El Sheikh", "كفر الشيخ"], ["Damietta", "دمياط"], ["Port Said", "بورسعيد"],
+      ["Ismailia", "الإسماعيلية"], ["Suez", "السويس"], ["Faiyum", "الفيوم"], ["Beni Suef", "بني سويف"], ["Minya", "المنيا"], ["Asyut", "أسيوط"],
+      ["Sohag", "سوهاج"], ["Qena", "قنا"], ["Luxor", "الأقصر"], ["Aswan", "أسوان"], ["Red Sea", "البحر الأحمر"], ["New Valley", "الوادي الجديد"],
+      ["Matrouh", "مطروح"], ["North Sinai", "شمال سيناء"], ["South Sinai", "جنوب سيناء"],
+    ]),
+  ],
+  IQ: [
+    g("Governorates", "المحافظات", [
+      ["Baghdad", "بغداد"], ["Basra", "البصرة"], ["Nineveh (Mosul)", "نينوى (الموصل)"], ["Erbil", "أربيل"], ["Sulaymaniyah", "السليمانية"], ["Duhok", "دهوك"],
+      ["Kirkuk", "كركوك"], ["Najaf", "النجف"], ["Karbala", "كربلاء"], ["Babil (Hillah)", "بابل (الحلة)"], ["Anbar (Ramadi)", "الأنبار (الرمادي)"], ["Diyala (Baqubah)", "ديالى (بعقوبة)"],
+      ["Saladin (Tikrit)", "صلاح الدين (تكريت)"], ["Wasit (Kut)", "واسط (الكوت)"], ["Dhi Qar (Nasiriyah)", "ذي قار (الناصرية)"], ["Maysan (Amarah)", "ميسان (العمارة)"], ["Muthanna (Samawah)", "المثنى (السماوة)"], ["Qadisiyyah (Diwaniyah)", "القادسية (الديوانية)"],
+      ["Halabja", "حلبجة"],
+    ]),
+  ],
+  LB: [
+    g("Governorates", "المحافظات", [
+      ["Beirut", "بيروت"], ["Mount Lebanon", "جبل لبنان"], ["North (Tripoli)", "الشمال (طرابلس)"], ["Akkar", "عكار"], ["South (Sidon)", "الجنوب (صيدا)"], ["Nabatieh", "النبطية"],
+      ["Beqaa (Zahle)", "البقاع (زحلة)"], ["Baalbek-Hermel", "بعلبك الهرمل"], ["Keserwan-Jbeil", "كسروان جبيل"],
+    ]),
+  ],
+  PS: [
+    g("West Bank", "الضفة الغربية", [
+      ["Jerusalem", "القدس"], ["Ramallah & Al-Bireh", "رام الله والبيرة"], ["Nablus", "نابلس"], ["Hebron", "الخليل"], ["Bethlehem", "بيت لحم"], ["Jenin", "جنين"],
+      ["Tulkarm", "طولكرم"], ["Qalqilya", "قلقيلية"], ["Salfit", "سلفيت"], ["Tubas", "طوباس"], ["Jericho", "أريحا"],
+    ]),
+    g("Gaza Strip", "قطاع غزة", [["Gaza", "غزة"], ["North Gaza", "شمال غزة"], ["Deir al-Balah", "دير البلح"], ["Khan Yunis", "خان يونس"], ["Rafah", "رفح"]]),
+  ],
+  MA: [
+    g("Regions", "الجهات", [
+      ["Casablanca-Settat", "الدار البيضاء سطات"], ["Rabat-Salé-Kénitra", "الرباط سلا القنيطرة"], ["Marrakech-Safi", "مراكش آسفي"], ["Fès-Meknès", "فاس مكناس"], ["Tanger-Tétouan-Al Hoceïma", "طنجة تطوان الحسيمة"], ["Souss-Massa (Agadir)", "سوس ماسة (أكادير)"],
+      ["Oriental (Oujda)", "الشرق (وجدة)"], ["Béni Mellal-Khénifra", "بني ملال خنيفرة"], ["Drâa-Tafilalet", "درعة تافيلالت"], ["Guelmim-Oued Noun", "كلميم واد نون"], ["Laâyoune-Sakia El Hamra", "العيون الساقية الحمراء"], ["Dakhla-Oued Ed-Dahab", "الداخلة وادي الذهب"],
+    ]),
+  ],
+  TN: [
+    g("Governorates", "الولايات", [
+      ["Tunis", "تونس"], ["Ariana", "أريانة"], ["Ben Arous", "بن عروس"], ["Manouba", "منوبة"], ["Nabeul", "نابل"], ["Zaghouan", "زغوان"],
+      ["Bizerte", "بنزرت"], ["Béja", "باجة"], ["Jendouba", "جندوبة"], ["Kef", "الكاف"], ["Siliana", "سليانة"], ["Sousse", "سوسة"],
+      ["Monastir", "المنستير"], ["Mahdia", "المهدية"], ["Sfax", "صفاقس"], ["Kairouan", "القيروان"], ["Kasserine", "القصرين"], ["Sidi Bouzid", "سيدي بوزيد"],
+      ["Gabès", "قابس"], ["Medenine", "مدنين"], ["Tataouine", "تطاوين"], ["Gafsa", "قفصة"], ["Tozeur", "توزر"], ["Kebili", "قبلي"],
+    ]),
+  ],
+  DZ: [
+    g("Provinces", "الولايات", [
+      ["Adrar", "أدرار"], ["Chlef", "الشلف"], ["Laghouat", "الأغواط"], ["Oum El Bouaghi", "أم البواقي"], ["Batna", "باتنة"], ["Béjaïa", "بجاية"],
+      ["Biskra", "بسكرة"], ["Béchar", "بشار"], ["Blida", "البليدة"], ["Bouira", "البويرة"], ["Tamanrasset", "تمنراست"], ["Tébessa", "تبسة"],
+      ["Tlemcen", "تلمسان"], ["Tiaret", "تيارت"], ["Tizi Ouzou", "تيزي وزو"], ["Algiers", "الجزائر العاصمة"], ["Djelfa", "الجلفة"], ["Jijel", "جيجل"],
+      ["Sétif", "سطيف"], ["Saïda", "سعيدة"], ["Skikda", "سكيكدة"], ["Sidi Bel Abbès", "سيدي بلعباس"], ["Annaba", "عنابة"], ["Guelma", "قالمة"],
+      ["Constantine", "قسنطينة"], ["Médéa", "المدية"], ["Mostaganem", "مستغانم"], ["M'Sila", "المسيلة"], ["Mascara", "معسكر"], ["Ouargla", "ورقلة"],
+      ["Oran", "وهران"], ["El Bayadh", "البيض"], ["Illizi", "إليزي"], ["Bordj Bou Arréridj", "برج بوعريريج"], ["Boumerdès", "بومرداس"], ["El Tarf", "الطارف"],
+      ["Tindouf", "تندوف"], ["Tissemsilt", "تيسمسيلت"], ["El Oued", "الوادي"], ["Khenchela", "خنشلة"], ["Souk Ahras", "سوق أهراس"], ["Tipaza", "تيبازة"],
+      ["Mila", "ميلة"], ["Aïn Defla", "عين الدفلى"], ["Naâma", "النعامة"], ["Aïn Témouchent", "عين تموشنت"], ["Ghardaïa", "غرداية"], ["Relizane", "غليزان"],
+      ["Timimoun", "تيميمون"], ["Bordj Badji Mokhtar", "برج باجي مختار"], ["Ouled Djellal", "أولاد جلال"], ["Béni Abbès", "بني عباس"], ["In Salah", "عين صالح"], ["In Guezzam", "عين قزام"],
+      ["Touggourt", "تقرت"], ["Djanet", "جانت"], ["El M'Ghair", "المغير"], ["El Meniaa", "المنيعة"],
+    ]),
+  ],
 };
 
 export const regionPresetCount = (country: string) => (REGION_PRESETS[country] ?? []).reduce((n, g) => n + g.cities.length, 0);

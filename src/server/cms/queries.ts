@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { db } from "../db";
+import { db, inProfile } from "../db";
 import { t } from "@/lib/i18n-text";
 import { imageDTO } from "../catalog/dto";
 import { categoryTree, type CategoryNode } from "../catalog/taxonomy";
@@ -10,7 +10,8 @@ import { parseSectionData, sectionStyleSchema } from "@/cms/sections";
 export const getPage = cache(async (slug: string, opts: { preview?: boolean } = {}) => {
   const page = await db.page.findUnique({
     where: { slug },
-    include: { sections: { where: opts.preview ? {} : { isVisible: true }, orderBy: { position: "asc" } } },
+    // Homepage sections belong to the active store type; other pages' are shared.
+    include: { sections: { where: { AND: [opts.preview ? {} : { isVisible: true }, await inProfile()] }, orderBy: { position: "asc" } } },
   });
   if (!page || (!opts.preview && page.status !== "PUBLISHED")) return null;
   return {

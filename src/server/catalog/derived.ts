@@ -1,5 +1,5 @@
 import "server-only";
-import { db, type Tx } from "../db";
+import { db, ANY_PROFILE, type Tx } from "../db";
 import { getSettings } from "../settings/service";
 import { allLocales } from "@/lib/i18n-text";
 import { normalizeText, phoneticKey, romanizeArabic, stemText } from "@/lib/search-text";
@@ -13,7 +13,7 @@ import { priceRange, resolvePrice, stockState, variantPriceSource } from "@/lib/
  */
 export async function refreshProductDerived(productId: string, tx: Tx = db) {
   const p = await tx.product.findUnique({
-    where: { id: productId },
+    where: { id: productId, ...ANY_PROFILE },
     include: {
       brand: { select: { name: true } },
       variants: { where: { isActive: true }, include: { options: { include: { value: { select: { label: true } } } } } },
@@ -85,7 +85,7 @@ export async function refreshProductDerived(productId: string, tx: Tx = db) {
   ).slice(0, 1000);
 
   await tx.product.update({
-    where: { id: productId },
+    where: { id: productId, ...ANY_PROFILE },
     data: { effectivePrice, maxPrice, discountPercent, onSale, stockStatus: status, searchText, searchTitle, searchBrand, searchPhonetic, ...(p.type === "VARIABLE" ? { stock } : {}) },
   });
   return { effectivePrice, onSale, stockStatus: status, stock };
@@ -97,8 +97,10 @@ export async function refreshProductDerived(productId: string, tx: Tx = db) {
  */
 export async function refreshScheduledPrices() {
   const now = new Date();
+  // Every store-type profile: a sale may end while its type isn't active.
   const candidates = await db.product.findMany({
     where: {
+      ...ANY_PROFILE,
       OR: [
         { salePrice: { not: null }, OR: [{ saleStartsAt: { not: null } }, { saleEndsAt: { not: null } }] },
         { variants: { some: { salePrice: { not: null }, OR: [{ saleStartsAt: { not: null } }, { saleEndsAt: { not: null } }] } } },

@@ -299,6 +299,7 @@ export function ProductsList({ data }: { data: Data }) {
                     <p className={cn("flex items-center gap-1.5 truncate font-medium", drawer.value === r.id && "text-ad-accent")}>
                       {r.name}
                       {r.isFeatured && <Star className="size-3.5 shrink-0 fill-amber-400 text-amber-400" />}
+                      {r.demo && <span className="shrink-0 rounded-full bg-violet-500/10 px-1.5 py-px text-[10px] font-semibold text-violet-600">{locale === "ar" ? "تجريبي" : "Demo"}</span>}
                     </p>
                     <p className="truncate text-xs text-ad-muted">{[r.brand, r.category, r.type === "VARIABLE" ? t("p.variantsCount", { n: r.variants }) : null].filter(Boolean).join(" · ")}</p>
                   </div>

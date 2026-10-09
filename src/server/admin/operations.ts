@@ -1,6 +1,6 @@
 import "server-only";
 import { z } from "zod";
-import { db, Prisma } from "../db";
+import { db, Prisma, ANY_PROFILE } from "../db";
 import { Errors } from "../errors";
 import { audit } from "../audit";
 import { revokeAllSessions } from "../auth/session";
@@ -83,7 +83,7 @@ export async function reviewList(q: { status?: string; q?: string; page?: number
 /** Keep product rating aggregates in sync with approved reviews only. */
 async function refreshRating(productId: string) {
   const agg = await db.review.aggregate({ where: { productId, status: "APPROVED" }, _avg: { rating: true }, _count: { _all: true } });
-  await db.product.update({ where: { id: productId }, data: { ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10, ratingCount: agg._count._all } });
+  await db.product.update({ where: { id: productId, ...ANY_PROFILE }, data: { ratingAvg: Math.round((agg._avg.rating ?? 0) * 10) / 10, ratingCount: agg._count._all } });
 }
 
 export async function moderateReview(id: string, input: { status?: "APPROVED" | "REJECTED" | "SPAM" | "PENDING"; reply?: string | null; delete?: boolean }, staff: CurrentStaff) {

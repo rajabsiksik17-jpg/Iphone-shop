@@ -48,7 +48,6 @@ export const SETTINGS_DEFS: Record<string, Def> = {
       {
         title: ["Operations", "التشغيل"],
         fields: [
-          { path: "defaultCountry", type: "text", label: ["Default country (ISO)", "الدولة الافتراضية (ISO)"], ltr: true, placeholder: "JO" },
           { path: "orderNumberPrefix", type: "text", label: ["Order number prefix", "بادئة رقم الطلب"], ltr: true },
           { path: "lowStockThreshold", type: "number", label: ["Low-stock threshold", "حد المخزون المنخفض"], min: 0 },
           { path: "newProductDays", type: "number", label: ["“New” badge for (days)", "شارة «جديد» لمدة (أيام)"], min: 0, max: 365 },

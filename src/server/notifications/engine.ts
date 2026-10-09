@@ -1,6 +1,6 @@
 import "server-only";
 import { paymentMethodTitle } from "../integrations/registry";
-import { db } from "../db";
+import { db, ANY_PROFILE } from "../db";
 import { env } from "../env";
 import { logger } from "../logger";
 import { on, isRegistered, type DomainEvents } from "../events/bus";
@@ -146,7 +146,7 @@ const builders: { [E in NotificationEventKey]?: Builder<E> } = {
     };
   },
   async PRODUCT_LOW_STOCK({ productId, stock }) {
-    const p = await db.product.findUnique({ where: { id: productId }, select: { id: true, name: true } });
+    const p = await db.product.findUnique({ where: { id: productId, ...ANY_PROFILE }, select: { id: true, name: true } });
     if (!p) return null;
     return {
       event: "PRODUCT_LOW_STOCK",
@@ -161,7 +161,7 @@ const builders: { [E in NotificationEventKey]?: Builder<E> } = {
     };
   },
   async PRODUCT_OUT_OF_STOCK({ productId }) {
-    const p = await db.product.findUnique({ where: { id: productId }, select: { id: true, name: true } });
+    const p = await db.product.findUnique({ where: { id: productId, ...ANY_PROFILE }, select: { id: true, name: true } });
     if (!p) return null;
     return {
       event: "PRODUCT_OUT_OF_STOCK",

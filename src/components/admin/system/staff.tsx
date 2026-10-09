@@ -11,7 +11,7 @@ import { PageHeader, Panel, Pill, Segmented, DataTable, ConfirmDialog } from "..
 import { Label, TextInput, Select, LocalizedField, TextArea, FieldError } from "../fields";
 import { EditSheet } from "../entity";
 import { saveStaffAction, resetStaffPasswordAction, saveRoleAction, deleteRoleAction } from "@/actions/admin/system";
-import { PERMISSIONS, PERMISSION_GROUPS, type Permission } from "@/config/permissions";
+import { PERMISSIONS, PERMISSION_GROUPS, type GrantablePermission as Permission } from "@/config/permissions";
 import { timeAgo } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { StaffData } from "@/server/admin/system";

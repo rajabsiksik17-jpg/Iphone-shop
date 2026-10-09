@@ -6,6 +6,7 @@ import { getCurrentUser } from "./auth/session";
 import { requestMeta } from "./request";
 import { switchableCurrencies, moneyContext } from "./commerce/currency";
 import { currencyForCountry } from "@/config/currencies";
+import { countryProfile } from "@/config/countries";
 import { findCart } from "./commerce/cart";
 import { freeShippingThreshold } from "./commerce/shipping";
 import { publicIntegrationConfig } from "./integrations/service";
@@ -64,7 +65,9 @@ export const getStorefrontShell = cache(async (locale: "ar" | "en") => {
   // An explicit choice (cookie) always wins; otherwise suggest the shopper's
   // country currency. Nothing is forced — the selector stays available.
   const visitorCountry = (settings.geo.detectFromHeaders ? meta.country : null) ?? meta.languageRegion;
-  const displayCurrency = jar.get("NQ_CURRENCY")?.value ?? (settings.fx.currencyByCountry ? currencyForCountry(visitorCountry) : null);
+  // Visitor country → its currency; undetected → the primary store country's.
+  // Detection only shapes this visitor's defaults — it never changes store settings.
+  const displayCurrency = jar.get("NQ_CURRENCY")?.value ?? (settings.fx.currencyByCountry ? (currencyForCountry(visitorCountry) ?? countryProfile(settings.geo.defaultCountry).currency) : null);
   const money = await moneyContext(locale, displayCurrency);
   const wishlist = user ? (await db.wishlistItem.findMany({ where: { userId: user.id }, select: { productId: true } })).map((w) => w.productId) : [];
   const ga = integrations.google_analytics as { measurementId?: string } | undefined;

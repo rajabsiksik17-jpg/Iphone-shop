@@ -1,6 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
-import { db, type Tx } from "../db";
+import { db, inProfile, type Tx } from "../db";
 import { hmac, randomToken } from "../crypto";
 import { AppError } from "../errors";
 import { getSettings } from "../settings/service";
@@ -16,9 +16,12 @@ import type { ImageDTO } from "@/types/catalog";
 const CART_COOKIE_DAYS = 60;
 export const MAX_LINE_QTY = 99;
 
-const cartInclude = {
+// Lines whose product belongs to another store-type profile stay in the cart
+// (they come back if the store switches back) but aren't shown or charged.
+const cartIncludeFor = (scope: { OR: { profile: string | null }[] }) => ({
   items: {
-    orderBy: { addedAt: "asc" },
+    where: { product: scope },
+    orderBy: { addedAt: "asc" as const },
     include: {
       product: {
         include: {
@@ -30,15 +33,16 @@ const cartInclude = {
       variant: { include: { options: { include: { attribute: true, value: true } }, image: true } },
     },
   },
-} as const;
+}) as const;
+const cartInclude = async () => cartIncludeFor(await inProfile());
 
 /** Resolve the shopper's cart (account cart if signed in, else guest cookie). Read-only. */
 export async function findCart() {
   const user = await getCurrentUser();
-  if (user) return db.cart.findUnique({ where: { userId: user.id }, include: cartInclude });
+  if (user) return db.cart.findUnique({ where: { userId: user.id }, include: await cartInclude() });
   const token = (await cookies()).get(COOKIE.CART)?.value;
   if (!token) return null;
-  return db.cart.findUnique({ where: { guestTokenHash: hmac(token, "cart") }, include: cartInclude });
+  return db.cart.findUnique({ where: { guestTokenHash: hmac(token, "cart") }, include: await cartInclude() });
 }
 
 /** Remember the checkout destination on the cart (country/city-targeted promotions use it). */
@@ -52,17 +56,17 @@ export async function setCartDestination(country: string | null, regionId: strin
 async function ensureCart() {
   const user = await getCurrentUser();
   if (user) {
-    return db.cart.upsert({ where: { userId: user.id }, create: { userId: user.id }, update: {}, include: cartInclude });
+    return db.cart.upsert({ where: { userId: user.id }, create: { userId: user.id }, update: {}, include: await cartInclude() });
   }
   const jar = await cookies();
   let token = jar.get(COOKIE.CART)?.value;
   if (token) {
-    const existing = await db.cart.findUnique({ where: { guestTokenHash: hmac(token, "cart") }, include: cartInclude });
+    const existing = await db.cart.findUnique({ where: { guestTokenHash: hmac(token, "cart") }, include: await cartInclude() });
     if (existing) return existing;
   }
   token = randomToken(24);
   jar.set(COOKIE.CART, token, cookieOptions(CART_COOKIE_DAYS * 86_400));
-  return db.cart.create({ data: { guestTokenHash: hmac(token, "cart") }, include: cartInclude });
+  return db.cart.create({ data: { guestTokenHash: hmac(token, "cart") }, include: await cartInclude() });
 }
 
 /** On sign-in: fold the guest cart into the account cart, then drop it. */

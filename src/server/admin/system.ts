@@ -8,7 +8,8 @@ import { randomToken } from "../crypto";
 import { getSettings } from "../settings/service";
 import { hashPassword, passwordIssues, verifyPassword } from "../auth/password";
 import { revokeAllSessions } from "../auth/session";
-import { ALL_PERMISSIONS, WILDCARD } from "@/config/permissions";
+import { ALL_PERMISSIONS, WILDCARD, isSuperAdmin } from "@/config/permissions";
+import { MASKED_ADMIN, isSuperAdminUser, superAdminIds, superAdminUserWhere, visibleStaffWhere } from "../auth/protect";
 import { localized, t } from "@/lib/i18n-text";
 import type { CurrentStaff } from "../auth/session";
 
@@ -17,10 +18,12 @@ const pageOf = (n?: number) => Math.max(1, n ?? 1);
 
 // ─────────────────────────────── Staff & roles ──────────────────────────────
 
-export async function staffData(locale: string) {
+export async function staffData(locale: string, viewer: CurrentStaff) {
+  // Store-level staff never see super-admins or the super-admin role.
+  const superView = isSuperAdmin(viewer.permissions);
   const [users, roles] = await Promise.all([
-    db.user.findMany({ where: { type: "STAFF" }, orderBy: [{ status: "asc" }, { name: "asc" }], include: { role: { select: { id: true, name: true, key: true } }, avatar: { select: { url: true } } } }),
-    db.role.findMany({ orderBy: [{ isSystem: "desc" }, { createdAt: "asc" }], include: { _count: { select: { users: true } } } }),
+    db.user.findMany({ where: { type: "STAFF", ...visibleStaffWhere(viewer.permissions) }, orderBy: [{ status: "asc" }, { name: "asc" }], include: { role: { select: { id: true, name: true, key: true } }, avatar: { select: { url: true } } } }),
+    db.role.findMany({ where: superView ? {} : { NOT: { permissions: { has: WILDCARD } } }, orderBy: [{ isSystem: "desc" }, { createdAt: "asc" }], include: { _count: { select: { users: true } } } }),
   ]);
   return {
     users: users.map((u) => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, status: u.status, locale: u.locale, roleId: u.roleId, role: u.role ? t(u.role.name, locale) : null, avatar: u.avatar?.url ?? null, lastLoginAt: u.lastLoginAt?.toISOString() ?? null, agentStatus: u.agentStatus })),
@@ -67,7 +70,8 @@ export async function saveStaff(id: string | null, raw: unknown, actor: CurrentS
   if (clash) throw Errors.invalid({ email: ["taken"] });
 
   if (id) {
-    const existing = await db.user.findFirst({ where: { id, type: "STAFF" }, include: { role: true } });
+    // Invisible accounts behave as if they don't exist for store-level staff.
+    const existing = await db.user.findFirst({ where: { id, type: "STAFF", ...visibleStaffWhere(actor.permissions) }, include: { role: true } });
     if (!existing) throw Errors.notFound("staff");
     if (id === actor.id && (p.roleId !== existing.roleId || p.status !== existing.status)) throw new AppError("cant_edit_self", 409);
     if (existing.role?.permissions.includes(WILDCARD) && !actor.permissions.includes(WILDCARD)) throw Errors.forbidden();
@@ -85,7 +89,7 @@ export async function saveStaff(id: string | null, raw: unknown, actor: CurrentS
 }
 
 export async function resetStaffPassword(id: string, actor: CurrentStaff) {
-  const u = await db.user.findFirst({ where: { id, type: "STAFF" }, include: { role: true } });
+  const u = await db.user.findFirst({ where: { id, type: "STAFF", ...visibleStaffWhere(actor.permissions) }, include: { role: true } });
   if (!u) throw Errors.notFound("staff");
   if (u.role?.permissions.includes(WILDCARD) && !actor.permissions.includes(WILDCARD)) throw Errors.forbidden();
   const tempPassword = makeTempPassword();
@@ -140,19 +144,23 @@ export async function securityData(tab: LogTab, q: { q?: string; page?: number; 
 
   switch (tab) {
     case "audit": {
-      const where: Prisma.AuditLogWhereInput = { ...(like ? { OR: [{ action: like }, { summary: like }, { actorEmail: like }, { entityId: like }] } : {}), ...(q.filter ? { entityType: q.filter } : {}) };
+      // Store-level staff don't see what happened to super-admin accounts, and their actions show masked.
+      const protectedIds = isSuperAdmin(staff.permissions) ? [] : await superAdminIds();
+      const where: Prisma.AuditLogWhereInput = { ...(like ? { OR: [{ action: like }, { summary: like }, { actorEmail: like }, { entityId: like }] } : {}), ...(q.filter ? { entityType: q.filter } : {}), ...(protectedIds.length ? { NOT: { entityType: "user", entityId: { in: protectedIds } } } : {}) };
       const [rows, total] = await Promise.all([db.auditLog.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE, take: PAGE, include: { actor: { select: { name: true } } } }), db.auditLog.count({ where })]);
-      return result(rows.map((r) => ({ id: r.id, at: r.createdAt.toISOString(), actor: r.actor?.name ?? r.actorEmail ?? "system", action: r.action, entity: r.entityType ? `${r.entityType}${r.entityId ? `:${r.entityId.slice(-8)}` : ""}` : null, summary: r.summary, changes: r.changes, ip: r.ip })), total);
+      const hidden = new Set(protectedIds);
+      return result(rows.map((r) => ({ id: r.id, at: r.createdAt.toISOString(), actor: r.actorId && hidden.has(r.actorId) ? MASKED_ADMIN.en : (r.actor?.name ?? r.actorEmail ?? "system"), action: r.action, entity: r.entityType ? `${r.entityType}${r.entityId ? `:${r.entityId.slice(-8)}` : ""}` : null, summary: r.summary, changes: r.changes, ip: r.ip })), total);
     }
     case "logins": {
-      const where: Prisma.LoginAttemptWhereInput = { ...(like ? { OR: [{ email: like }, { ip: like }] } : {}), ...(q.filter === "failed" ? { success: false } : q.filter === "admin" ? { scope: "ADMIN" } : {}) };
+      const hiddenEmails = isSuperAdmin(staff.permissions) ? [] : (await db.user.findMany({ where: superAdminUserWhere, select: { email: true } })).map((u) => u.email);
+      const where: Prisma.LoginAttemptWhereInput = { ...(like ? { OR: [{ email: like }, { ip: like }] } : {}), ...(q.filter === "failed" ? { success: false } : q.filter === "admin" ? { scope: "ADMIN" } : {}), ...(hiddenEmails.length ? { email: { notIn: hiddenEmails } } : {}) };
       const [rows, total] = await Promise.all([db.loginAttempt.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * PAGE, take: PAGE }), db.loginAttempt.count({ where })]);
       return result(rows.map((r) => ({ id: r.id, at: r.createdAt.toISOString(), email: r.email, scope: r.scope, success: r.success, reason: r.reason, ip: r.ip, device: r.userAgent })), total);
     }
     case "sessions": {
       const { sessions } = await getSettings("security");
       const idleCutoff = new Date(Date.now() - sessions.adminIdleMinutes * 60_000);
-      const where: Prisma.SessionWhereInput = { scope: "ADMIN", revokedAt: null, expiresAt: { gt: new Date() }, lastSeenAt: { gt: idleCutoff } };
+      const where: Prisma.SessionWhereInput = { scope: "ADMIN", revokedAt: null, expiresAt: { gt: new Date() }, lastSeenAt: { gt: idleCutoff }, user: visibleStaffWhere(staff.permissions) };
       const rows = await db.session.findMany({ where, orderBy: { lastSeenAt: "desc" }, take: 200, include: { user: { select: { name: true, email: true } } } });
       return result(rows.map((s) => ({ id: s.id, user: s.user.name, email: s.user.email, ip: s.ip, device: s.userAgent, createdAt: s.createdAt.toISOString(), lastSeenAt: s.lastSeenAt.toISOString(), current: s.id === staff.sessionId })), rows.length);
     }
@@ -176,7 +184,7 @@ export async function securityData(tab: LogTab, q: { q?: string; page?: number; 
 
 export async function revokeSessionById(id: string, actor: CurrentStaff) {
   const s = await db.session.findUnique({ where: { id }, include: { user: { select: { email: true } } } });
-  if (!s) throw Errors.notFound("session");
+  if (!s || (!isSuperAdmin(actor.permissions) && (await isSuperAdminUser(s.userId)))) throw Errors.notFound("session");
   await db.session.update({ where: { id }, data: { revokedAt: new Date() } });
   await audit({ actor, action: "session.revoked", entityType: "session", entityId: id, summary: s.user.email });
 }

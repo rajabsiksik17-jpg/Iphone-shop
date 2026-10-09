@@ -54,13 +54,15 @@ export async function countryRegions(country: string, locale: Locale) {
 
 const codes = z.array(z.string().length(2).transform((s) => s.toUpperCase())).max(250);
 
-/** Shipping countries (empty = everywhere) and the default country. */
-export async function saveCountries(raw: { countries: unknown; defaultCountry: unknown }, staff: CurrentStaff) {
+/**
+ * Shipping countries (empty = everywhere). The primary country is set by the
+ * super-admin (Settings → Primary store country) and must stay shippable.
+ */
+export async function saveCountries(raw: { countries: unknown }, staff: CurrentStaff) {
   const list = [...new Set(codes.parse(raw.countries))];
-  const def = z.string().length(2).parse(raw.defaultCountry).toUpperCase();
-  if (list.length && !list.includes(def)) throw Errors.invalid({ defaultCountry: ["not_in_list"] });
+  const { defaultCountry: primary } = await getSettings("geo");
+  if (list.length && !list.includes(primary)) throw Errors.invalid({ countries: ["primary_required"] });
   await patchSettings("checkout", { allowedCountries: list });
-  await patchSettings("geo", { defaultCountry: def });
   invalidateDestinations();
   await audit({ actor: staff, action: "settings.updated", entityType: "settings", entityId: "countries", summary: list.length ? list.join(", ") : "all countries" });
 }

@@ -124,6 +124,8 @@ export async function listAdminProducts(q: ProductListQuery, locale: string) {
       type: p.type,
       variants: p._count.variants,
       isFeatured: p.isFeatured,
+      // Sample data from a store-type template (safe to remove; never mixed up with the merchant's own).
+      demo: p.source === "DEMO",
       updatedAt: p.updatedAt.toISOString(),
     })),
     total,
